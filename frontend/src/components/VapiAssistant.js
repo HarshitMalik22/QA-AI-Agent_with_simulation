@@ -8,34 +8,48 @@ const VapiAssistant = ({ onTranscriptUpdate, onCallStateChange }) => {
     const [isSpeechActive, setIsSpeechActive] = useState(false);
 
     useEffect(() => {
-        // Event Listeners
-        vapi.on('call-start', () => {
+        // Event Handlers
+        const onCallStart = () => {
             setIsSessionActive(true);
             onCallStateChange && onCallStateChange('active');
-        });
+        };
 
-        vapi.on('call-end', () => {
+        const onCallEnd = () => {
             setIsSessionActive(false);
             onCallStateChange && onCallStateChange('inactive');
-        });
+        };
 
-        vapi.on('speech-start', () => {
-            setIsSpeechActive(true);
-        });
+        const onSpeechStart = () => setIsSpeechActive(true);
+        const onSpeechEnd = () => setIsSpeechActive(false);
 
-        vapi.on('speech-end', () => {
-            setIsSpeechActive(false);
-        });
+        const onMessage = (message) => {
+            if (message.type === 'conversation-update') {
+                const formattedTranscript = message.conversation
+                    .filter(msg => msg.role !== 'system')
+                    .map(msg => {
+                        const roleLabel = msg.role === 'assistant' ? 'Agent' : 'Driver';
+                        return `${roleLabel}: ${msg.content}`;
+                    })
+                    .join('\n');
 
-        vapi.on('message', (message) => {
-            if (message.type === 'transcript' && message.transcriptType === 'final') {
-                // Pass transcript back to parent for analysis
-                onTranscriptUpdate && onTranscriptUpdate(message.transcript);
+                onTranscriptUpdate && onTranscriptUpdate(formattedTranscript);
             }
-        });
+        };
 
+        // Attach listeners
+        vapi.on('call-start', onCallStart);
+        vapi.on('call-end', onCallEnd);
+        vapi.on('speech-start', onSpeechStart);
+        vapi.on('speech-end', onSpeechEnd);
+        vapi.on('message', onMessage);
+
+        // Cleanup
         return () => {
-            // Cleanup? Vapi instance is global usually
+            vapi.off('call-start', onCallStart);
+            vapi.off('call-end', onCallEnd);
+            vapi.off('speech-start', onSpeechStart);
+            vapi.off('speech-end', onSpeechEnd);
+            vapi.off('message', onMessage);
         };
     }, [onTranscriptUpdate, onCallStateChange]);
 
@@ -44,27 +58,41 @@ const VapiAssistant = ({ onTranscriptUpdate, onCallStateChange }) => {
             vapi.stop();
         } else {
             vapi.start({
+                transcriber: {
+                    provider: "deepgram",
+                    model: "nova-2",
+                    language: "hi"
+                },
                 model: {
                     provider: "openai",
-                    model: "gpt-3.5-turbo",
+                    model: "gpt-4o",
                     messages: [
                         {
                             role: "system",
                             content: `You are a helpful Support Agent for 'Battery Smart', India's largest battery swapping network for e-rickshaws.
                             
-                            Context Data (Live Status - Delhi):
-                            - Tilak Nagar (Stn A): OVERLOADED (9/10 rickshaws). Wait: 20 mins.
-                            - Rajouri Garden (Stn B): FREE (2/12 rickshaws). Wait: 2 mins. (Only 3km from Tilak Nagar).
-                            - Okhla Phase 3 (Stn C): MODERATE.
-                            - Mayapuri (Stn D): MODERATE.
+                            **Data Context (Live)**:
+                            - **Tilak Nagar (Stn A)**: OVERLOADED (Waittime: 20 mins).
+                            - **Rajouri Garden (Stn B)**: FREE (Waittime: 2 mins). Distance: 3km from Tilak Nagar.
                             
-                            Guidelines:
-                            1. **LANGUAGE**: You must speak mixed **Hindi + English (Hinglish)**. Example: "Haanji sir, Tilak Nagar mein bahut bheed hai, aap Rajouri chale jao."
-                            2. **GOAL**: Route drivers to *Rajouri Garden* if they are near Tilak Nagar because it is faster.
-                            3. **TECHNICAL**: If they say "Battery Stuck" or "Lock issue", say: "Arre, jabardasti mat karo! Technician bhej raha hoon." (Don't force it, sending tech).
-                            4. **EMPATHY**: Validating their "Range Anxiety" is critical.
+                            **Agent Guidelines**:
+                            1. **Language & Tone**: Speak natural **Hinglish** (Hindi + English mix).
+                               - *Strict Rule*: Do NOT use complex English words. Use simple phonetic Hindi.
+                               - *Bad*: "It will take output", "Surf 3 kilometers".
+                               - *Good*: "Sir, wahan mat jao", "Sirf 3 kilometer door hai".
                             
-                            Be polite, use "Sir" or "Bhaiyya", and keep it natural.`
+                            2. **Scenarios & Actions**:
+                               - **High Wait Time / Traffic**: IF driver is at Tilak Nagar OR complains about waiting, SUGGEST Rajouri Garden.
+                                 *Example*: "Sir, Tilak Nagar mein 20 min ki waiting hai. Aap Rajouri chale jao, wahan sirf 2 min lagenge."
+                               
+                               - **Battery/Lock Issue**: IF driver says "Battery stuck" or "Lock nahi khul raha", ADVISE against force and promise a technician.
+                                 *Example*: "Zor mat lagaiye sir, lock kharab ho jayega. Main technician bhej raha hoon."
+                               
+                               - **Payment/Balance**: IF driver asks about balance, say "Check kar raha hoon... Sir, minimum balance maintain rakhna zaroori hai."
+                               
+                               - **General**: If they just say "Hello" or "Namaste", greet them back warmly in Hinglish. "Namaste sir, kahiye kya seva karoon?"
+
+                            3. **Constraint**: Keep responses short and conversational. Do NOT hallucinate words.`
                         }
                     ]
                 },

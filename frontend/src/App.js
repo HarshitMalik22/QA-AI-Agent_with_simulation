@@ -136,7 +136,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <label style={{ marginBottom: 0 }}>Live Transcript</label>
                 <VapiAssistant
-                  onTranscriptUpdate={(text) => setTranscript(prev => prev + ' ' + text)}
+                  onTranscriptUpdate={(text) => setTranscript(text)}
                   onCallStateChange={(state) => {
                     if (state === 'active') setTranscript(''); // Clear on start
                   }}
