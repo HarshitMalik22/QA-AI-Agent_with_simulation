@@ -178,7 +178,7 @@ function App() {
           ) : (
             <>
               {/* Top Row: Map & KPIs */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                 <div className="card">
                   <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>Live Station Map</h4>
                   <StationMap
@@ -194,13 +194,13 @@ function App() {
                   <div className="kpi-container">
                     <KPIGauge
                       value={analysis.alternatives.find(a => !a.is_actual)?.expected_wait_time || '0'}
-                      label="Exp. Wait"
+                      label={analysis.actual_decision?.decision_type === 'technical_safety' ? 'Technician ETA' : 'Exp. Wait'}
                       unit="min"
                       type="time"
                     />
                     <KPIGauge
                       value={analysis.alternatives.find(a => !a.is_actual)?.congestion_risk || 'Low'}
-                      label="Congestion"
+                      label={analysis.actual_decision?.decision_type === 'technical_safety' ? 'Safety Risk' : 'Congestion'}
                       type="risk"
                     />
                   </div>
@@ -221,6 +221,7 @@ function App() {
                     <thead>
                       <tr>
                         <th>Scenario</th>
+                        <th>Context</th>
                         <th>Wait Time</th>
                         <th>Congestion</th>
                         <th>Repeat Risk</th>
@@ -237,6 +238,9 @@ function App() {
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                               {alt.option}
                             </div>
+                          </td>
+                          <td style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                            {alt.description}
                           </td>
                           <td>{alt.expected_wait_time} min</td>
                           <td>

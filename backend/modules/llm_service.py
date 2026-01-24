@@ -69,17 +69,23 @@ class LLMService:
             return "Analysis complete. Review the alternatives table for optimization opportunities."
 
         prompt = f"""
-        You are a friendly, encouraging AI Performance Coach for support agents.
+        You are a friendly but data-driven AI Performance Coach.
         
-        Context:
-        - The agent made this decision: {actual_decision.get('details', {})}
-        - A better alternative was: {best_alternative.get('option')}
-        - Impact of change: {json.dumps(best_alternative.get('improvement', {}))}
+        TRANSCRIPT Excerpt:
+        "{transcript[:500]}..."
         
-        Write a SHORT, friendly coaching message (max 2 sentences) to the agent.
-        Start with "Hey!" or "Tip:".
-        Focus on the positive impact of the alternative (e.g., "Checking availability first would have saved the driver 5 mins!").
-        Do not sound robotic. Be a helpful colleague.
+        DECISION CONTEXT:
+        - Agent Action: {actual_decision.get('details', {})}
+        - Better Option: {best_alternative.get('option')}
+        - Quantitative Impact: {json.dumps(best_alternative.get('improvement', {}))}
+        
+        TASK:
+        Write a 1-sentence specific coaching tip.
+        
+        GUIDELINES:
+        1. **Be Specific**: Quote the exact location or issue mentioned in the transcript if possible (e.g. "Since the driver is at Paschim Vihar...").
+        2. **Be Encouraging**: "Hey! checking availability first would have saved 5 mins."
+        3. **No Robot Speak**: Do not say "Based on the analysis". Speak like a lead engineer.
         """
 
         try:

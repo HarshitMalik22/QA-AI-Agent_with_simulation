@@ -51,6 +51,8 @@ class DigitalTwinSimulator:
             return self._simulate_escalation(decision)
         elif decision_type == "response_structure":
             return self._simulate_response(decision, driver_location)
+        elif decision_type == "technical_safety":
+            return self._simulate_safety(decision, driver_location)
         else:
             return {
                 "option": "Unknown",
@@ -225,3 +227,43 @@ class DigitalTwinSimulator:
         alternatives.sort(key=lambda x: x["expected_wait_time"])
         
         return alternatives
+
+    def _simulate_safety(self, decision: Dict[str, Any],
+                        driver_location: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+        """Simulate technical safety decision outcomes"""
+        # Safety/Technical extraction puts details in 'details' or top-level 'safety_action'
+        details = decision.get("details", {})
+        action = details.get("action", "monitor")
+        
+        # Metrics for safety scenarios
+        safety_score = "Low"
+        technician_eta = 0.0
+        
+        if action == "dispatch_technician":
+            technician_eta = 15.0 # Average arrival
+            safety_score = "High" # Technician ensures safety
+            option_name = "Dispatch Technician"
+            
+        elif action == "stop_immediately":
+            technician_eta = 0.0 # N/A
+            safety_score = "Medium" # Safe but driver grounded
+            option_name = "Stop & Wait"
+            
+        else:
+            # Dangerous: just monitoring a fire/smoke issue
+            technician_eta = 0.0
+            safety_score = "Critical"
+            option_name = "Monitor Only"
+            
+        # Map to standard interface
+        # expected_wait_time -> Technician ETA
+        # congestion_risk -> Safety Risk (Critical/High/Med/Low)
+        
+        risk_map = {"High": "Low", "Medium": "Medium", "Critical": "High", "Low": "Critical"}
+        
+        return {
+            "option": option_name,
+            "expected_wait_time": technician_eta, # Reuse field for ETA
+            "congestion_risk": risk_map.get(safety_score, "High"), # Reuse for Safety Risk
+            "repeat_call_risk": "Low" if action == "dispatch_technician" else "High"
+        }

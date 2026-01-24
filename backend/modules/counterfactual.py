@@ -136,7 +136,17 @@ class CounterfactualComparator:
         # Simulate actual decision
         actual_result = self.digital_twin.simulate_decision(actual_decision, driver_location)
         actual_result["is_actual"] = True
-        actual_result["description"] = "Original decision"
+        
+        # Generate dynamic description for original
+        reasons = []
+        if actual_result["congestion_risk"] == "High": reasons.append("High Congestion")
+        if actual_result["expected_wait_time"] > 15: reasons.append("Long Wait")
+        if actual_result["repeat_call_risk"] == "High": reasons.append("Risk of Repeat Call")
+        
+        if reasons:
+            actual_result["description"] = f"Original ({', '.join(reasons)})"
+        else:
+            actual_result["description"] = "Original Decision (Standard)"
         
         # Simulate alternatives
         simulated_alternatives = []

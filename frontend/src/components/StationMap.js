@@ -21,7 +21,7 @@ const StationMap = ({ stations, driverLocation, recommendedStationId }) => {
 
     return (
         <div className="map-container">
-            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <svg width="100%" height="100%" viewBox="0 0 100 100">
                 {/* Grid Lines */}
                 <defs>
                     <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
@@ -61,12 +61,12 @@ const StationMap = ({ stations, driverLocation, recommendedStationId }) => {
                             />
 
                             {/* Station Label */}
-                            <text y="7" fontSize="3" textAnchor="middle" fill="#64748B" fontWeight="600">
+                            <text y="7" fontSize="5" textAnchor="middle" fill="#64748B" fontWeight="600">
                                 Stn {station.id}
                             </text>
 
                             {/* Load Indicator */}
-                            <text y="-5" fontSize="2.5" textAnchor="middle" fill={loadColor}>
+                            <text y="-5" fontSize="4" textAnchor="middle" fill={loadColor}>
                                 {Math.round((station.current_load / station.capacity) * 100)}%
                             </text>
                         </g>
@@ -76,7 +76,7 @@ const StationMap = ({ stations, driverLocation, recommendedStationId }) => {
                 {/* Driver */}
                 <g transform={`translate(${mapPositions.driver.x}, ${mapPositions.driver.y})`}>
                     <circle r="3" fill="#1A1F2C" stroke="white" strokeWidth="0.5" />
-                    <text y="6" fontSize="3" textAnchor="middle" fill="#1A1F2C" fontWeight="700">You</text>
+                    <text y="7" fontSize="5" textAnchor="middle" fill="#1A1F2C" fontWeight="700">You</text>
                 </g>
             </svg>
 

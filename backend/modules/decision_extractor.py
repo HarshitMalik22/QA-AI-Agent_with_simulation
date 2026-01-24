@@ -19,7 +19,14 @@ class DecisionExtractor:
             r"route.*?station\s+([A-Z]|\d+)",
             r"send.*?station\s+([A-Z]|\d+)",
             r"go to\s+station\s+([A-Z]|\d+)",
-            r"station\s+([A-Z]|\d+).*?near"
+            r"station\s+([A-Z]|\d+).*?near",
+            # Specific Delhi Locations
+            r"(tilak\s*nagar)",
+            r"(rajouri\s*garden)",
+            r"(paschim\s*vihar)",
+            r"(janak\s*puri)",
+            r"(okhla)",
+            r"(mayapuri)"
         ]
         
         self.escalation_patterns = [
@@ -49,9 +56,15 @@ class DecisionExtractor:
             return self._extract_routing_decision(transcript, driver_location)
         elif decision_type == "escalation_timing":
             return self._extract_escalation_decision(transcript)
+        elif decision_type == "technical_safety":
+            return self._extract_technical_decision(transcript)
         elif decision_type == "response_structure":
             return self._extract_response_decision(transcript)
         else:
+            # Check for safety keywords if type is unknown
+            if any(k in transcript.lower() for k in ["smoke", "fire", "burn", "warm", "stuck", "lock"]):
+                 return self._extract_technical_decision(transcript)
+            
             # Default to routing if unclear
             return self._extract_routing_decision(transcript, driver_location)
     
@@ -60,15 +73,26 @@ class DecisionExtractor:
         """Extract station routing decision"""
         transcript_lower = transcript.lower()
         
-        # Try to find station ID
+        # Try to find station ID or Name
         station_id = None
+        station_name = None
+        
         for pattern in self.station_patterns:
             match = re.search(pattern, transcript_lower, re.IGNORECASE)
             if match:
-                station_id = match.group(1).upper()
+                val = match.group(1).upper()
+                # Check if it's a known named location
+                if "TILAK" in val: station_id = "A" # Mock map to Stn A
+                elif "RAJOURI" in val: station_id = "B" # Mock map to Stn B
+                elif "OKHLA" in val: station_id = "C"
+                elif "MAYAPURI" in val: station_id = "D"
+                else: 
+                    station_id = val # A, B, C, etc.
+                
+                station_name = val.title()
                 break
         
-        # If no station found, try to infer from context
+        # If no station found, look for generic station mentions
         if not station_id:
             # Look for station names or numbers
             station_match = re.search(r"(station|stn)\s*([A-Z0-9]+)", transcript_lower, re.IGNORECASE)
@@ -84,6 +108,7 @@ class DecisionExtractor:
             "details": {
                 "action": "route_to_station",
                 "station": station_id,
+                "station_name": station_name, # Pass specific name
                 "driver_location": driver_location
             },
             "escalation_action": None,
@@ -112,6 +137,7 @@ class DecisionExtractor:
             "response_style": None
         }
     
+    
     def _extract_response_decision(self, transcript: str) -> Dict[str, Any]:
         """Extract response structure decision"""
         transcript_lower = transcript.lower()
@@ -133,4 +159,31 @@ class DecisionExtractor:
             },
             "escalation_action": None,
             "response_style": response_style
+        }
+
+    def _extract_technical_decision(self, transcript: str) -> Dict[str, Any]:
+        """Extract technical safety decision"""
+        transcript_lower = transcript.lower()
+        
+        issue_type = "general_fault"
+        if any(k in transcript_lower for k in ["smoke", "fire", "burn", "heat"]):
+            issue_type = "critical_temp"
+        elif any(k in transcript_lower for k in ["stuck", "lock", "jam"]):
+            issue_type = "lock_failure"
+            
+        action = "monitor"
+        if "technician" in transcript_lower:
+            action = "dispatch_technician"
+        elif "stop" in transcript_lower or "ruk" in transcript_lower: # Hindi 'ruk'
+            action = "stop_immediately"
+            
+        return {
+            "decision_type": "technical_safety",
+            "station_id": None, 
+            "details": {
+                "action": action,
+                "issue": issue_type
+            },
+            "technical_issue": issue_type,
+            "safety_action": action
         }
