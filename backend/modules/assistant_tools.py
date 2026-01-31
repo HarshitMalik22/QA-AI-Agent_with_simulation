@@ -1,6 +1,6 @@
 import math
 import requests
-from data.mock_data import MOCK_STATIONS, MOCK_DRIVERS, MOCK_SWAP_HISTORY, MOCK_SUBSCRIPTION_PLANS, MOCK_DSK_CENTERS
+from data.mock_data import MOCK_STATIONS, MOCK_DRIVERS, MOCK_SWAP_HISTORY, MOCK_SUBSCRIPTION_PLANS, MOCK_DSK_CENTERS, ALLOWED_LEAVES_PER_MONTH
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """
@@ -116,19 +116,86 @@ def get_plan_details(plan_name: str = None):
         return {"plan": MOCK_SUBSCRIPTION_PLANS[plan_name]}
     return {"plans": MOCK_SUBSCRIPTION_PLANS}
 
+    return {"plans": MOCK_SUBSCRIPTION_PLANS}
+
+def verify_driver_by_id(driver_id: str, name: str = None):
+    """
+    INSTANT verification of driver by their Driver ID.
+    """
+    found_driver = None
+    found_phone = None
+    for phone, d in MOCK_DRIVERS.items():
+        if d.get("id") == driver_id:
+            found_driver = d
+            found_phone = phone
+            break
+    
+    if found_driver:
+        return {"verified": True, "name": found_driver["name"], "phone": found_phone, "details": found_driver}
+    return {"verified": False, "error": "Invalid Driver ID"}
+
+def report_issue(issue_type: str, description: str, customer_phone: str = None):
+    """
+    Report a technical or operational issue.
+    """
+    ticket_id = f"TKT-{abs(hash(description)) % 10000}"
+    print(f"ISSUE REPORTED: {issue_type} - {description} (Ticket: {ticket_id})")
+    return {"status": "success", "ticket_id": ticket_id, "message": "Ticket raised successfully"}
+
+def check_penalty_status(phone_number: str):
+    """
+    Check if the driver has any penalties.
+    """
+    driver = MOCK_DRIVERS.get(phone_number)
+    if not driver:
+        return {"error": "Driver not found"}
+    
+    return {
+        "has_penalty": driver.get("pending_penalty", 0) > 0,
+        "penalty_amount": driver.get("pending_penalty", 0),
+        "leaves_taken": driver.get("leaves_taken", 0),
+        "allowed_leaves": ALLOWED_LEAVES_PER_MONTH
+    }
+
+def escalate_to_agent(reason: str, customer_phone: str = None):
+    """
+    Transfer the call to a human agent.
+    """
+    print(f"ESCALATING CALL: {customer_phone} - Reason: {reason}")
+    return {"status": "escalated", "message": "Call transferred to human agent"}
+
 # Tool Definitions for Vapi/OpenAI
 TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "verify_driver_by_id",
+            "description": "INSTANT verification of driver by their Driver ID (e.g., D121604, D998877). Use this IMMEDIATELY when a driver provides their ID. Returns verified status and driver details. Optionally verify name too.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "driver_id": {"type": "string", "description": "The Driver ID provided by the user"},
+                    "name": {"type": "string", "description": "Optional name to verify against"}
+                },
+                "required": ["driver_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_driver_profile",
-            "description": "Get driver details including name, current plan, balance and validity. Use this when user asks about their account, balance or validity.",
+            "description": "Get driver details including name, current plan, balance and validity. Use with caller's phone number for account queries.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "phone_number": {
                         "type": "string",
                         "description": "The driver's phone number exactly as appeared in caller ID (e.g. +11234567890)"
+                    },
+                    "driver_id": {
+                        "type": "string",
+                        "description": "Optional driver ID if known"
                     }
                 },
                 "required": ["phone_number"]
@@ -213,6 +280,51 @@ TOOLS_SCHEMA = [
                     }
                 },
                 "required": ["location_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "escalate_to_agent",
+            "description": "Transfer the call to a human agent. Use this ONLY when: 1. User is angry/abusive. 2. User explicitly asks for a human. 3. You cannot solve the query after 2 attempts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {"type": "string", "description": "Reason for escalation"},
+                    "customer_phone": {"type": "string", "description": "Customer's phone number"}
+                },
+                "required": ["reason"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "report_issue",
+            "description": "Report a technical or operational issue (e.g., Less Range, Hardware Broken, Station Closed).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_type": {"type": "string", "description": "Type of issue"},
+                    "description": {"type": "string", "description": "Description of the issue"},
+                    "customer_phone": {"type": "string", "description": "Customer's phone number"}
+                },
+                "required": ["issue_type", "description"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_penalty_status",
+            "description": "Check if the driver has any penalties or leave restrictions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone_number": {"type": "string", "description": "The driver's phone number."}
+                },
+                "required": ["phone_number"]
             }
         }
     }

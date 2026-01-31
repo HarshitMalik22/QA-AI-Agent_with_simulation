@@ -39,8 +39,26 @@ from modules.assistant_tools import (
     get_swap_history,
     get_nearest_station,
     get_nearest_dsk,
+    verify_driver_by_id,
+    report_issue,
+    check_penalty_status,
+    escalate_to_agent,
     get_plan_details
 )
+
+# Global Tool Mapping for Dispatcher
+TOOL_MAPPING = {
+    "get_driver_profile": get_driver_profile,
+    "get_swap_history": get_swap_history,
+    "get_nearest_station": get_nearest_station,
+    "get_nearest_dsk": get_nearest_dsk,
+    "get_plan_details": get_plan_details,
+    "verify_driver_by_id": verify_driver_by_id,
+    "report_issue": report_issue,
+    "check_penalty_status": check_penalty_status,
+    "escalate_to_agent": escalate_to_agent,
+    "update_driver_location": driver_sim.set_location_by_name # Special case mapped directly
+}
 
 app = FastAPI(title="QA-Driven Digital Twin API")
 
@@ -194,7 +212,7 @@ LATEST_ANALYSIS = None
 
 VAPI_ASSISTANT_CONFIG = {
     "name": "Raju Rastogi",
-    "firstMessage": "Namaste Sir! Main Raju Rastogi bol raha hoon. Kahiye, main aapki kya madad kar sakta hoon?",
+    "firstMessage": "Namaste Sir! Main Raju Rastogi Battery Smart se bol raha hoon. Kahiye, main aapki kya madad kar sakta hoon?",
     "transcriber": {
         "provider": "deepgram",
         "model": "nova-2",
@@ -206,29 +224,75 @@ VAPI_ASSISTANT_CONFIG = {
         "messages": [
             {
                 "role": "system",
-                "content": """You are **Raju Rastogi**, a helpful Support Agent for 'Battery Smart', India's largest battery swapping network for e-rickshaws.
+                "content": """You are Raju, Battery Smart support agent. Speak natural Hindi (Devanagari).
 
-                **Core Persona**:
-                - You are a generic Indian driver support agent.
-                - **CRITICAL**: You must speak in **PURE HINDI (Devanagari Script)**.
-                - **ABSOLUTE RULE**: Do NOT use English/Roman script for Hindi words. (e.g., write "नमस्ते", NOT "Namaste").
-                - Only use English for specific technical nouns: 'Battery', 'Station', 'Swapping', 'Login', 'OTP'.
-                - Example: "नमस्ते सर! मैं राजू रस्तोगी बोल रहा हूँ। बताइए मैं आपकी क्या मदद कर सकता हूँ?"
+**MANDATORY IDENTITY CHECK:**
+1. **VERIFICATION FIRST** - If the user asks for account details (balance, plan, swaps, payment), you MUST ask for their **Driver ID** first. Ask based on the context. Example: "Details check karne ke liye apna Driver ID batayein?" or "Jankari ke liye ID bataiye?".
+2. **NO ASSUMPTIONS** - DO NOT assume you know who the caller is. Even if you have the phone number, verify the ID first for security.
+3. **INSTANT ID VERIFY** - When driver gives ID (e.g. D121604), call `verify_driver_by_id(driver_id="...")` SILENTLY.
+   - If verified: "Haan [NAME] ji, verify ho gaya." then give the info.
+   - If invalid: "Ye ID system mein nahi mili. Phir se batayein?"
 
-                **Data Context (Live)**:
-                - **Tilak Nagar (Stn A)**: OVERLOADED (Waittime: 20 mins).
-                - **Rajouri Garden (Stn B)**: FREE (Waittime: 2 mins). Distance: 3km from Tilak Nagar.
+**ABSOLUTE RULES - NEVER BREAK:**
+1. **NEVER NARRATE TOOL CALLS** - NEVER say "I am calling...", "Let me check...", "Calling get_driver_profile...". Just call the tool SILENTLY and speak only the result.
+2. **NO FILLER WHILE WAITING** - If you need to call a tool, just say "एक second" then call it. Nothing more.
+3. **Han ji dekhiye** - Use this phrase when explaining something complex or starting a detailed answer.
 
-                **Protocol**:
-                1. **Greeting**: "नमस्ते सर! मैं राजू बोल रहा हूँ। कहिए, क्या सेवा करूँ?"
-                2. **Location First**: If the driver reports an issue, ALWAYS ask: "सर, अभी आप कहाँ पर हैं?" (Where are you right now?).
-                
-                **Scenarios**:
-                - **High Traffic**: If they are at Tilak Nagar: "सर, वहाँ बहुत भीड़ है (20 मिनट वेटिंग)। आप राजौरी गार्डन (Rajouri Garden) चले जाइए? वो पास है और खाली है।"
-                - **Battery Issue**: "ज़ोर मत लगाइए सर, लॉक टूट जाएगा। मैं टेक्निशियन (Technician) को भेज रहा हूँ।"
-                - **General Help**: Keep it polite and helpful. "जी सर, मैं चेक करता हूँ।"
+**RESOLUTION LOGIC & SCENARIOS:**
 
-                **Tone**: Respectful, patient, and clear. Native Hindi speaker. Use short sentences."""
+**1. "गाड़ी खराब" / "issue" / "problem" = REPORT ISSUE**
+- If driver reports a technical issue (battery drain, charger not working), use `report_issue`.
+- Step 1: Ask "Kya dikkat aa rahi hai?"
+- Step 2: Call `report_issue(issue_type="...", description="...")`.
+- Step 3: Say "Humne ticket raise kar di hai. Support team aapse jaldi connect karegi."
+
+**2. "swap नहीं कर सकता" / "leave" = LEAVE REQUEST** 
+- This means driver can't take swap today (leave)
+- Step 1: Verify ID if not verified.
+- Step 2: Call `check_penalty_status`.
+- Step 3: Explain penalty if applicable.
+
+**3. "swap history" / "invoice"**  
+- Call `get_swap_history` with caller's phone
+- Report the results
+
+**PRICING STRUCTURE (AUTHORITATIVE):**
+- **Components**: Swap Price + Leave Penalty + Service Charge.
+- **Base Swap Price**: ₹170 (First swap of the day).
+- **Secondary Swap Price**: ₹70 (Subsequent swaps).
+- **Service Charge**: ₹40 per swap (Added to EVERY swap).
+- **Leave Penalty**: 
+  - 4 leave days/month FREE.
+  - Beyond 4 days: ₹120 penalty applied.
+  - Recovery: ₹60 deducted per swap until paid.
+
+**EXAMPLES OF TOTAL CHARGES:**
+- Base Swap: ₹170 + ₹40 = ₹210 (No penalty).
+- Secondary Swap: ₹70 + ₹40 = ₹110 (No penalty).
+- Base Swap + Penalty Recovery: ₹170 + ₹40 + ₹60 = ₹270.
+
+**ONLY TWO DRIVER IDs EXIST:**
+- D121604 = Ramesh Kumar (phone: +919876543210)  
+- D998877 = Suresh Verma (phone: +918595789129)
+
+**RESPONSE STYLE:**
+- **NATURAL & CONVERSATIONAL:** Speak like a helpful, polite Indian support agent. Use natural fillers like "Haan ji", "Achha", "Ek min".
+- **HINGLISH:** Use natural Hinglish (Hindi + English words) as appropriate for Indian context.
+- **NO ROBOTIC JSON READING (CRITICAL):** 
+    - You will receive data in JSON format from tools. **NEVER read the raw JSON structure**.
+    - **INTERPRET** the data and speak the result in a simple sentence.
+    
+    **Examples:**
+    - **Verification**: `{'verified': true, 'name': 'Ramesh'}` -> Say: "Haan Ramesh ji, verify ho gaya hai."
+    - **Account**: `{'balance': 450}` -> Say: "Aapka balance 450 rupaye hai."
+    - **Swap History**: If you get a list of swaps (e.g., `{'swaps': [{'date': '2024-01-25', 'station': 'BS-001'}]}`):
+        - Say: "Sir, aapne last swap 25th Jan ko BS-001 station pe kiya tha."
+        - Do NOT list all fields. Just give the summary or last swap details unless asked for more.
+
+**RESPONSE FORMAT:**
+- Keep answers SHORT (1-2 sentences).
+- Focus on solving the user's immediate query.
+"""
             }
         ]
     },
@@ -350,31 +414,24 @@ async def vapi_webhook(request: Request):
             result = {"error": "Function not found"}
             
             try:
-                if func_name == "get_driver_profile":
-                    result = get_driver_profile(args.get("phone_number"))
-                elif func_name == "get_swap_history":
-                    result = get_swap_history(args.get("phone_number"))
-                elif func_name == "get_nearest_station":
-                    result = get_nearest_station(
-                        lat=args.get("lat"), 
-                        lon=args.get("lon"),
-                        location_name=args.get("location_name")
-                    )
-                elif func_name == "get_nearest_dsk":
-                    result = get_nearest_dsk(
-                        lat=args.get("lat"), 
-                        lon=args.get("lon"),
-                        location_name=args.get("location_name")
-                    )
-                elif func_name == "update_driver_location":
-                     # Magic tool to move the driver
-                     loc_name = args.get("location_name")
-                     result = driver_sim.set_location_by_name(loc_name)
-                elif func_name == "get_plan_details":
-                    result = get_plan_details(args.get("plan_name"))
+                if func_name in TOOL_MAPPING:
+                    tool_func = TOOL_MAPPING[func_name]
+                    # Inspect function signature or rely on kwargs matching.
+                    # Our tools generally accept specific named args, but the mock tools 
+                    # might not catch unexpected kwargs if we blindly pass **args.
+                    # Ideally, we should filter args based on signature, but for this Hackathon/Demo:
+                    # We will pass specific args if known, or just pass **args and let the tool handle it.
+                    # Given the simplicity, let's try passing the args dict as kwargs.
+                    
+                    print(f"Dispatching {func_name} ...")
+                    result = tool_func(**args)
+                else:
+                    print(f"Tool {func_name} not found in mapping.")
+                    result = {"error": f"Function {func_name} not supported"}
+
             except Exception as e:
                 print(f"Error executing {func_name}: {e}")
-                result = {"error": str(e)}
+                result = {"error": f"Execution failed: {str(e)}"}
             
             results.append({
                 "toolCallId": call_id,

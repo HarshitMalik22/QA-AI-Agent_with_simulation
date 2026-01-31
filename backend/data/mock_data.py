@@ -112,6 +112,14 @@ MOCK_TRANSCRIPTS = [
     }
 ]
 
+# Pricing Constants
+BASE_SWAP_PRICE = 170
+SECONDARY_SWAP_PRICE = 70
+LEAVE_PENALTY_TOTAL = 120
+LEAVE_PENALTY_PER_SWAP = 60
+SERVICE_CHARGE = 40
+ALLOWED_LEAVES_PER_MONTH = 4
+
 MOCK_SUBSCRIPTION_PLANS = {
     "basic": {"name": "Basic Plan", "price": 499, "validity_days": 28, "swaps": 10},
     "smart_saver": {"name": "Smart Saver", "price": 999, "validity_days": 28, "swaps": 25},
@@ -120,26 +128,46 @@ MOCK_SUBSCRIPTION_PLANS = {
 
 MOCK_DRIVERS = {
     "+919876543210": {
+        "id": "D121604",
         "name": "Ramesh Kumar",
         "plan": "smart_saver",
         "plan_expiry": "2024-02-15",
-        "balance": 150,
+        "balance": 450,
+        "leaves_taken": 2,
+        "pending_penalty": 0,
         "home_station": "BS-001"
     },
-    "+11234567890": {  # Default for testing
+    "+918595789129": {
+        "id": "D998877",
+        "name": "Suresh Verma",
+        "plan": "unlimited",
+        "plan_expiry": "2024-02-20",
+        "balance": 680,
+        "leaves_taken": 1,
+        "pending_penalty": 0,
+        "home_station": "BS-002"
+    },
+    "+11234567890": {
+        "id": "D000000",
         "name": "Test Driver",
         "plan": "basic",
         "plan_expiry": "2024-02-10",
-        "balance": 50,
+        "balance": 100,
+        "leaves_taken": 5,
+        "pending_penalty": 120,
         "home_station": "BS-002"
     }
 }
 
 MOCK_SWAP_HISTORY = {
     "+11234567890": [
-        {"date": "2024-01-25", "station": "Station A", "units": 1.2, "amount": 80, "status": "Success"},
-        {"date": "2024-01-23", "station": "Station B", "units": 1.1, "amount": 75, "status": "Success"},
-        {"date": "2024-01-20", "station": "Station A", "units": 1.3, "amount": 85, "status": "failed"}
+        {"date": "2024-01-25", "station": "Station A", "units": 1.2, "amount": 210, "status": "Success"},
+        {"date": "2024-01-23", "station": "Station B", "units": 1.1, "amount": 110, "status": "Success"},
+        {"date": "2024-01-20", "station": "Station A", "units": 1.3, "amount": 210, "status": "failed"}
+    ],
+    "+919876543210": [
+        {"date": "2024-01-30", "station": "Tilak Nagar - Main Market", "units": 1.5, "amount": 210, "status": "Success"},
+        {"date": "2024-01-28", "station": "Janakpuri DSK", "units": 1.1, "amount": 210, "status": "Success"}
     ]
 }
 

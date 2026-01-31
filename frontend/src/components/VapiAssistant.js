@@ -53,60 +53,44 @@ const VapiAssistant = ({ onTranscriptUpdate, onCallStateChange }) => {
         };
     }, [onTranscriptUpdate, onCallStateChange]);
 
-    const toggleCall = () => {
+    const toggleCall = async () => {
         if (isSessionActive) {
             vapi.stop();
         } else {
-            vapi.start({
-                name: "Raju Rastogi",
-                firstMessage: "Namaste Sir! Main Raju Rastogi bol raha hoon. Kahiye, main aapki kya madad kar sakta hoon?",
-                transcriber: {
-                    provider: "deepgram",
-                    model: "nova-2",
-                    language: "hi"
-                },
-                model: {
-                    provider: "openai",
-                    model: "gpt-4o",
-                    messages: [
-                        {
-                            role: "system",
-                            content: `You are **Raju Rastogi**, a helpful Support Agent for 'Battery Smart', India's largest battery swapping network for e-rickshaws.
-                            
-                            **Data Context (Live)**:
-                            - **Tilak Nagar (Stn A)**: OVERLOADED (Waittime: 20 mins).
-                            - **Rajouri Garden (Stn B)**: FREE (Waittime: 2 mins). Distance: 3km from Tilak Nagar.
-                            
-                            **Protocol - CRITICAL**:
-                            - **ALWAYS ask for location FIRST** before suggesting ANY solution.
-                            - If driver reports a problem (smoke, stuck, wait time), ask: "Sir, aap abhi kahan ho?" (Sir, where are you right now?)
-                            
-                            **Agent Guidelines**:
-                            1. **Language & Tone**: Speak natural **Hinglish** (Hindi + English mix).
-                               - *Strict Rule*: Do NOT use complex English words. Use simple phonetic Hindi.
-                               - *Bad*: "It will take output", "Surf 3 kilometers".
-                               - *Good*: "Sir, wahan mat jao", "Sirf 3 kilometer door hai".
-                            
-                            2. **Scenarios & Actions**:
-                               - **High Wait Time / Traffic**: IF driver is at Tilak Nagar OR complains about waiting, SUGGEST Rajouri Garden.
-                                 *Example*: "Sir, Tilak Nagar mein 20 min ki waiting hai. Aap Rajouri chale jao, wahan sirf 2 min lagenge."
-                               
-                               - **Battery/Lock Issue**: IF driver says "Battery stuck" or "Lock nahi khul raha", ADVISE against force and promise a technician.
-                                 *Example*: "Zor mat lagaiye sir, lock kharab ho jayega. Main technician bhej raha hoon."
-                               
-                               - **Payment/Balance**: IF driver asks about balance, say "Check kar raha hoon... Sir, minimum balance maintain rakhna zaroori hai."
-                               
-                               - **General**: If they just say "Hello" or "Namaste", greet them back warmly in Hinglish and ASK LOCATION. "Namaste sir, kahiye kya seva karoon? Aur aap abhi kahan ho?"
-
-                            3. **Constraint**: Keep responses short and conversational. Do NOT hallucinate words.`
+            try {
+                // Fetch dynamic configuration from backend
+                const response = await fetch('http://localhost:8000/api/vapi/assistant', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: {
+                            call: {
+                                customer: {
+                                    number: "+919876543210" // Default/Test number
+                                }
+                            }
                         }
-                    ]
-                },
-                voice: {
-                    provider: "11labs",
-                    voiceId: "burt"
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch assistant config');
                 }
-            });
+
+                const data = await response.json();
+
+                if (data.assistant) {
+                    vapi.start(data.assistant);
+                } else {
+                    console.error("Invalid config received:", data);
+                }
+
+            } catch (error) {
+                console.error("Error starting call:", error);
+                alert("Failed to start call. Check console/backend.");
+            }
         }
     };
 
