@@ -131,7 +131,7 @@ MOCK_DRIVERS = {
         "id": "D121604",
         "name": "Ramesh Kumar",
         "plan": "smart_saver",
-        "plan_expiry": "2024-02-15",
+        "plan_expiry": "2026-02-15",
         "balance": 450,
         "leaves_taken": 2,
         "pending_penalty": 0,
@@ -141,7 +141,7 @@ MOCK_DRIVERS = {
         "id": "D998877",
         "name": "Suresh Verma",
         "plan": "unlimited",
-        "plan_expiry": "2024-02-20",
+        "plan_expiry": "2026-02-20",
         "balance": 680,
         "leaves_taken": 1,
         "pending_penalty": 0,
@@ -151,7 +151,7 @@ MOCK_DRIVERS = {
         "id": "D000000",
         "name": "Test Driver",
         "plan": "basic",
-        "plan_expiry": "2024-02-10",
+        "plan_expiry": "2026-02-10",
         "balance": 100,
         "leaves_taken": 5,
         "pending_penalty": 120,
@@ -161,13 +161,13 @@ MOCK_DRIVERS = {
 
 MOCK_SWAP_HISTORY = {
     "+11234567890": [
-        {"date": "2024-01-25", "station": "Station A", "units": 1.2, "amount": 210, "status": "Success"},
-        {"date": "2024-01-23", "station": "Station B", "units": 1.1, "amount": 110, "status": "Success"},
-        {"date": "2024-01-20", "station": "Station A", "units": 1.3, "amount": 210, "status": "failed"}
+        {"date": "2026-01-25", "station": "Station A", "units": 1.2, "amount": 210, "status": "Success"},
+        {"date": "2026-01-23", "station": "Station B", "units": 1.1, "amount": 110, "status": "Success"},
+        {"date": "2026-01-20", "station": "Station A", "units": 1.3, "amount": 210, "status": "failed"}
     ],
     "+919876543210": [
-        {"date": "2024-01-30", "station": "Tilak Nagar - Main Market", "units": 1.5, "amount": 210, "status": "Success"},
-        {"date": "2024-01-28", "station": "Janakpuri DSK", "units": 1.1, "amount": 210, "status": "Success"}
+        {"date": "2026-01-30", "station": "Tilak Nagar - Main Market", "units": 1.5, "amount": 210, "status": "Success"},
+        {"date": "2026-01-28", "station": "Janakpuri DSK", "units": 1.1, "amount": 210, "status": "Success"}
     ]
 }
 

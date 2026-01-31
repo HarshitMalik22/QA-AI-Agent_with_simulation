@@ -112,7 +112,37 @@ class CityDigitalTwin:
                 self._simulate_station_step(station, minute, current_hour, demand_mod)
                 
         # 4. Aggregated Results
-        return self._generate_report()
+        
+        # Time-Series Capture
+        time_series = []
+        
+        for minute in range(minutes_total):
+            current_hour = minute / 60.0
+            
+            # Apply Dynamic Interventions (Demand shifts)
+            demand_mod = self._get_current_demand_modifier(current_hour, interventions)
+            
+            for station_id, station in self.stations.items():
+                self._simulate_station_step(station, minute, current_hour, demand_mod)
+            
+            # Capture state every hour (at minute 0, 60, 120...)
+            if minute % 60 == 0:
+                snapshot = {
+                    "hour": int(current_hour),
+                    "stations": {
+                        sid: {
+                            "queue": st["queue_length"],
+                            "inventory": st["inventory_ready"],
+                            "load": st["metrics"]["lost_swaps"] # Accumulating lost swaps
+                        } for sid, st in self.stations.items()
+                    }
+                }
+                time_series.append(snapshot)
+                
+        return {
+            **self._generate_report(),
+            "time_series": time_series
+        }
 
     def _apply_static_interventions(self, interventions: List[Dict[str, Any]]):
         """Apply structural changes before sim starts"""

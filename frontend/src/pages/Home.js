@@ -117,10 +117,11 @@ function Home() {
                 {/* Card 5: Extra */}
                 <div
                     className="tilted-card card-bg-4"
+                    onClick={() => navigate('/simulation')}
                 >
                     <div className="card-overlay">
-                        <h3>Knowledge Base</h3>
-                        <p>Coming Soon</p>
+                        <h3>City Simulation</h3>
+                        <p>What-If Analysis</p>
                     </div>
                 </div>
 

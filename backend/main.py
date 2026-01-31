@@ -11,7 +11,9 @@ load_dotenv()
 
 from modules.auto_qa import AutoQAAnalyzer
 from modules.decision_extractor import DecisionExtractor
+from modules.decision_extractor import DecisionExtractor
 from modules.digital_twin import DigitalTwinSimulator
+from modules.city_digital_twin import CityDigitalTwin
 from modules.counterfactual import CounterfactualComparator
 from modules.insight_generator import InsightGenerator
 import os
@@ -57,7 +59,8 @@ TOOL_MAPPING = {
     "report_issue": report_issue,
     "check_penalty_status": check_penalty_status,
     "escalate_to_agent": escalate_to_agent,
-    "update_driver_location": driver_sim.set_location_by_name # Special case mapped directly
+    "update_driver_location": driver_sim.set_location_by_name, # Special case mapped directly
+    "request_user_location": lambda: {"message": "Action: ASK user to speak their location."}
 }
 
 app = FastAPI(title="QA-Driven Digital Twin API")
@@ -84,6 +87,17 @@ class TranscriptRequest(BaseModel):
     transcript: str
     call_id: str
     driver_location: Optional[Dict[str, float]] = None
+
+class SimulationIntervention(BaseModel):
+    type: str # add_station, remove_station, modify_chargers, shift_demand
+    data: Optional[Dict[str, Any]] = None # For add_station
+    station_id: Optional[str] = None
+    count: Optional[int] = None
+    factor: Optional[float] = None
+    window: Optional[List[int]] = None # [start_hour, end_hour]
+
+class SimulationRequest(BaseModel):
+    interventions: List[SimulationIntervention] = []
 
 class AnalysisResponse(BaseModel):
     call_id: str
@@ -118,7 +132,25 @@ def get_sample_transcripts():
 @app.get("/api/simulation/live")
 def get_live_simulation_state():
     """Returns the current location of the simulated driver."""
+    """Returns the current location of the simulated driver."""
     return driver_sim.get_location()
+
+@app.post("/api/simulation/run")
+def run_city_simulation(request: SimulationRequest):
+    """
+    Run a full 24-hour City Digital Twin simulation.
+    Supports "What-If" interventions.
+    """
+    # Initialize Simulator with existing Mock Data
+    city_sim = CityDigitalTwin(MOCK_STATIONS)
+    
+    # Convert Pydantic models to Dicts for the simulator
+    intervention_dicts = [i.dict(exclude_none=True) for i in request.interventions]
+    
+    # Run Simulation
+    results = city_sim.run_simulation(interventions=intervention_dicts)
+    
+    return results
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
 def analyze_call(request: TranscriptRequest):
@@ -211,8 +243,7 @@ def download_logs():
 LATEST_ANALYSIS = None
 
 VAPI_ASSISTANT_CONFIG = {
-    "name": "Raju Rastogi",
-    "firstMessage": "Namaste Sir! Main Raju Rastogi Battery Smart se bol raha hoon. Kahiye, main aapki kya madad kar sakta hoon?",
+    "firstMessage": "Namaste Sir! Main Raju Rastogi Battery Smart se. Aap kis bhaasha mein baat karna chahenge: Hindi, English, Bangla ya Marathi?",
     "transcriber": {
         "provider": "deepgram",
         "model": "nova-2",
@@ -224,14 +255,24 @@ VAPI_ASSISTANT_CONFIG = {
         "messages": [
             {
                 "role": "system",
-                "content": """You are Raju, Battery Smart support agent. Speak natural Hindi (Devanagari).
+                "content": """You are Raju, Battery Smart support agent.
+                
+**LANGUAGE SELECTION (CRITICAL START):**
+1. The user has just been asked to choose: **Hindi, English, Bangla (Bengali), or Marathi**.
+2. **LISTEN** to their response.
+3. **ADAPT**: 
+   - **English**: Speak English.
+   - **Hindi**: Speak natural Hindi (Devanagari).
+   - **Bangla**: Speak natural Bengali.
+   - **Marathi**: Speak natural Marathi.
+   - If ambiguous, default to **Hindi**.
 
-**MANDATORY IDENTITY CHECK:**
-1. **VERIFICATION FIRST** - If the user asks for account details (balance, plan, swaps, payment), you MUST ask for their **Driver ID** first. Ask based on the context. Example: "Details check karne ke liye apna Driver ID batayein?" or "Jankari ke liye ID bataiye?".
-2. **NO ASSUMPTIONS** - DO NOT assume you know who the caller is. Even if you have the phone number, verify the ID first for security.
+**MANDATORY IDENTITY CHECK (STRICT):**
+1. **VERIFICATION FIRST** - If the user asks for account details (balance, plan, swaps, payment), you **MUST** ask for their **Driver ID** first.
+2. **NO ASSUMPTIONS** - Do NOT assume you know who the caller is. Even if you have the phone number, verify the ID first for security.
 3. **INSTANT ID VERIFY** - When driver gives ID (e.g. D121604), call `verify_driver_by_id(driver_id="...")` SILENTLY.
-   - If verified: "Haan [NAME] ji, verify ho gaya." then give the info.
-   - If invalid: "Ye ID system mein nahi mili. Phir se batayein?"
+   - If verified: "Dhanyawaad [NAME] ji. Verify ho gaya." then give the info.
+   - If invalid: "Ye ID system mein nahi mili. Kripya sahi ID batayein?"
 
 **ABSOLUTE RULES - NEVER BREAK:**
 1. **NEVER NARRATE TOOL CALLS** - NEVER say "I am calling...", "Let me check...", "Calling get_driver_profile...". Just call the tool SILENTLY and speak only the result.
@@ -255,6 +296,11 @@ VAPI_ASSISTANT_CONFIG = {
 **3. "swap history" / "invoice"**  
 - Call `get_swap_history` with caller's phone
 - Report the results
+
+**4. CUSTOMER DISSATISFACTION / ARGUING / ANGRY (CRITICAL)**
+- If the user arguments about ANYTHING (pricing, service, rules), sounds angry, unsatisfied, or if the conversation is going in circles (user rejecting your answers repeatedly):
+- **ACTION**: Call `escalate_to_agent(reason="User Dissatisfied/Arguing")` IMMEDIATELY.
+- **SAY**: "Sir, main samajh sakta hoon ki aap santusht nahi hain. Main apki call apne senior/human agent ko transfer kar raha hoon jo aapko behtar guide kar payenge."
 
 **PRICING STRUCTURE (AUTHORITATIVE):**
 - **Components**: Swap Price + Leave Penalty + Service Charge.
@@ -285,7 +331,7 @@ VAPI_ASSISTANT_CONFIG = {
     **Examples:**
     - **Verification**: `{'verified': true, 'name': 'Ramesh'}` -> Say: "Haan Ramesh ji, verify ho gaya hai."
     - **Account**: `{'balance': 450}` -> Say: "Aapka balance 450 rupaye hai."
-    - **Swap History**: If you get a list of swaps (e.g., `{'swaps': [{'date': '2024-01-25', 'station': 'BS-001'}]}`):
+    - **Swap History**: If you get a list of swaps (e.g., `{'swaps': [{'date': '2026-01-25', 'station': 'BS-001'}]}`):
         - Say: "Sir, aapne last swap 25th Jan ko BS-001 station pe kiya tha."
         - Do NOT list all fields. Just give the summary or last swap details unless asked for more.
 
@@ -339,7 +385,7 @@ async def vapi_assistant_request(request: Request):
     **CURRENT CALL CONTEXT**:
     - **Customer Phone**: {customer_number}
     - **Tools**: You have access to tools to fetch driver profile, swap history, nearby stations, and plans.
-    - **Rule**: ALWAYS verify the correct driver details using 'get_driver_profile' if account specific info is needed.
+    - **Rule**: ALWAYS ask for Driver ID and use 'verify_driver_by_id' before providing account info. Do NOT rely on caller ID.
     """
     config["model"]["messages"][0]["content"] = system_msg + context_injection
     
