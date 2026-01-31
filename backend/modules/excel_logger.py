@@ -30,6 +30,8 @@ def log_interaction(analysis_result):
         row_data = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Call ID": data.get("call_id"),
+            "Agent ID": data.get("agent_id", "AI_Raju"),
+            "City": data.get("city", "Delhi"),
             "Transcript": data.get("transcript"),
             
             # Auto-QA
@@ -42,6 +44,13 @@ def log_interaction(analysis_result):
             "Actual Details": json.dumps(actual_decision), # Store full JSON for debug
             "Actual Wait Time (min)": actual_sim.get("expected_wait_time"),
             "Actual Risk Level": actual_sim.get("congestion_risk"),
+            
+            # Scorecard Metrics (New)
+            "Adherence Score": qa_result.get("scorecard", {}).get("adherence_score"),
+            "Sentiment": qa_result.get("scorecard", {}).get("sentiment_label"),
+            "Correctness Score": qa_result.get("scorecard", {}).get("correctness_score"),
+            "Coaching Theme": qa_result.get("coaching_theme"),
+            "Supervisor Flag": "YES" if qa_result.get("supervisor_flag") else "NO",
             
             # Counterfactual / Optimization
             "Optimized Option": counterfactual_sim.get("option", "N/A"),

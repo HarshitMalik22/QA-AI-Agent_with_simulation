@@ -159,15 +159,25 @@ MOCK_DRIVERS = {
     }
 }
 
+
+from datetime import datetime, timedelta
+
+# Dynamic Timestamp Generation for "Recent Swap" Scenario
+NOW = datetime.now()
+SWAP_45_MIN_AGO = (NOW - timedelta(minutes=45)).isoformat()
+SWAP_DATE_TODAY = NOW.strftime("%Y-%m-%d")
+
 MOCK_SWAP_HISTORY = {
-    "+11234567890": [
-        {"date": "2026-01-25", "station": "Station A", "units": 1.2, "amount": 210, "status": "Success"},
-        {"date": "2026-01-23", "station": "Station B", "units": 1.1, "amount": 110, "status": "Success"},
-        {"date": "2026-01-20", "station": "Station A", "units": 1.3, "amount": 210, "status": "failed"}
-    ],
     "+919876543210": [
-        {"date": "2026-01-30", "station": "Tilak Nagar - Main Market", "units": 1.5, "amount": 210, "status": "Success"},
-        {"date": "2026-01-28", "station": "Janakpuri DSK", "units": 1.1, "amount": 210, "status": "Success"}
+        {"date": SWAP_DATE_TODAY, "timestamp": SWAP_45_MIN_AGO, "station": "BS-001", "units": 1.2, "amount": 170, "status": "Success"},
+        {"date": "2026-01-20", "timestamp": "2026-01-20T09:15:00", "station": "BS-002", "units": 0.8, "amount": 170, "status": "Success"}
+    ],
+    "+918595789129": [
+        {"date": "2026-01-28", "timestamp": "2026-01-28T18:45:00", "station": "BS-003", "units": 1.5, "amount": 170, "status": "Success"}
+    ],
+    "+11234567890": [
+        {"date": "2026-02-01", "timestamp": "2026-02-01T03:00:00", "station": "Tilak Nagar - Main Market", "units": 1.5, "amount": 210, "status": "Success"},
+        {"date": "2026-01-31", "timestamp": "2026-01-31T11:30:00", "station": "Janakpuri DSK", "units": 0.5, "amount": 170, "status": "Manual Override (Battery Issue)"}
     ]
 }
 

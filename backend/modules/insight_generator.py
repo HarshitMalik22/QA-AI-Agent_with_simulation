@@ -34,7 +34,7 @@ class InsightGenerator:
                 "issue_summary": "No issues detected in this call",
                 "recommendation": "Current decision appears optimal",
                 "impact_summary": "No significant improvements identified",
-                "formatted_output": self._format_no_issue(call_id)
+                "formatted_output": self._format_no_issue(call_id, qa_result)
             }
         
         # Find actual and best alternative
@@ -74,7 +74,8 @@ class InsightGenerator:
             actual,
             alternatives,
             best,
-            improvement
+            improvement,
+            qa_result
         )
         
         return {
@@ -96,6 +97,8 @@ class InsightGenerator:
             return "Escalate immediately to supervisor"
         elif decision_type == "response_structure":
             return "Ask driver preference before routing"
+        elif decision_type == "information_providing":
+            return "Provide clear, concise information (No routing needed)"
         else:
             return option_name
     
@@ -124,11 +127,27 @@ class InsightGenerator:
                         decision_type: str, actual: Dict[str, Any],
                         alternatives: List[Dict[str, Any]],
                         best: Dict[str, Any],
-                        improvement: Dict[str, Any]) -> str:
+                        improvement: Dict[str, Any],
+                        qa_result: Dict[str, Any]) -> str:
         """Format insights as demo-friendly text"""
         output = []
         output.append("🚨 QA Insight Detected\n")
+        
+        # Add Supervisor Flag if present
+        if qa_result.get("supervisor_flag"):
+            output.append("🚩 **SUPERVISOR REVIEW REQUIRED**\n")
+            
         output.append(f"Issue: {issue_summary}")
+        
+        # Add Scorecard
+        scorecard = qa_result.get("scorecard", {})
+        if scorecard:
+            output.append(f"\n📊 Scorecard:")
+            output.append(f"• Adherence: {scorecard.get('adherence_score', 'N/A')}/100")
+            output.append(f"• Correctness: {scorecard.get('correctness_score', 'N/A')}/100")
+            output.append(f"• Sentiment: {scorecard.get('sentiment_label', 'N/A')}")
+            output.append(f"• Coaching Theme: {qa_result.get('coaching_theme', 'N/A')}\n")
+            
         output.append(f"Call ID: #{call_id}\n")
         output.append("🔁 Simulated Alternatives\n")
         output.append("Option\tWait Time\tCongestion\tRepeat Call")
@@ -150,10 +169,25 @@ class InsightGenerator:
         
         return "\n".join(output)
     
-    def _format_no_issue(self, call_id: str) -> str:
+    def _format_no_issue(self, call_id: str, qa_result: Dict[str, Any]) -> str:
         """Format output when no issue detected"""
-        return f"✅ No Issues Detected\n\nCall ID: #{call_id}\n\nNo suboptimal decisions detected in this call."
-    
+        output = []
+        output.append("✅ No Issues Detected - Optimal Execution\n")
+        output.append(f"Call ID: #{call_id}\n")
+        
+        # Add Scorecard
+        scorecard = qa_result.get("scorecard", {})
+        if scorecard:
+            output.append(f"📊 Scorecard details:")
+            output.append(f"• Total Score: {scorecard.get('total_score', 'N/A')}/100")
+            output.append(f"• Authentication: {scorecard.get('authentication_score', 'N/A')}/30")
+            output.append(f"• Solution: {scorecard.get('solution_score', 'N/A')}/40")
+            output.append(f"• Greeting: {scorecard.get('greeting_score', 'N/A')}/10")
+            output.append(f"• Closing: {scorecard.get('closing_score', 'N/A')}/20")
+            output.append(f"• Sentiment: {scorecard.get('sentiment_label', 'N/A')}\n")
+            
+        output.append("No suboptimal decisions detected in this call.")
+        return "\n".join(output)    
     def _format_basic(self, call_id: str, qa_result: Dict[str, Any]) -> str:
         """Format basic output"""
         return f"🚨 QA Insight Detected\n\nIssue: {qa_result.get('reason', 'Issue detected')}\nCall ID: #{call_id}"

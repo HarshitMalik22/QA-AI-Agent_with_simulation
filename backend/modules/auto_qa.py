@@ -39,8 +39,31 @@ class AutoQAAnalyzer:
             "assumed without asking"
         ]
         
+        self.information_keywords = [
+            "balance", "plan", "validity", "penalty", "verify", "id", 
+            "driver id", "recharge", "subscription", "leaves", "days left"
+        ]
+        
+        self.troubleshooting_keywords = [
+            "issue", "problem", "drain", "slow", "fast", "bad", "mileage", "range", 
+            "charging", "discharge", "fault", "broken", "heat", "error"
+        ]
+        
         # Load station data for rule checks
         self.station_map = {s["id"]: s for s in MOCK_STATIONS}
+
+    def _get_perfect_scorecard(self) -> Dict[str, Any]:
+        """Return a perfect scorecard for optimal calls"""
+        return {
+            "total_score": 100,
+            "greeting_score": 10,
+            "authentication_score": 30,
+            "solution_score": 40,
+            "closing_score": 20,
+            "sentiment_label": "Positive",
+            "adherence_score": 100,
+            "correctness_score": 100
+        }
 
     def evaluate_decision(self, decision_contract: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -72,7 +95,6 @@ class AutoQAAnalyzer:
             "reason": "Decision appears optimal",
             "confidence": 0.0
         }
-
     
     def analyze(self, transcript: str) -> Dict[str, Any]:
         """
@@ -87,6 +109,17 @@ class AutoQAAnalyzer:
             }
         """
         transcript_lower = transcript.lower()
+        
+        # Rule 0: Detect Information/Account Context (Non-Routing) - HIGH PRIORITY
+        info_context = self._detect_information_context(transcript_lower)
+        if info_context:
+            return {
+                "issue_detected": False, 
+                "decision_type": "information_providing",
+                "reason": "Information/Account query detected (Optimal)",
+                "confidence": 0.9,
+                "scorecard": self._get_perfect_scorecard()
+            }
         
         # Rule 1: Check for risky routing mentions
         routing_risk = self._detect_routing_risk(transcript_lower)
@@ -127,13 +160,14 @@ class AutoQAAnalyzer:
                 "reason": sop_risk["reason"],
                 "confidence": sop_risk["confidence"]
             }
-        
+            
         # No issue detected
         return {
             "issue_detected": False,
             "decision_type": None,
             "reason": "No suboptimal decisions detected",
-            "confidence": 0.0
+            "confidence": 0.0,
+            "scorecard": self._get_perfect_scorecard()
         }
     
     def _detect_routing_risk(self, transcript: str) -> Optional[Dict[str, Any]]:
@@ -192,4 +226,20 @@ class AutoQAAnalyzer:
                 "confidence": 0.65
             }
         
+        return None
+
+    def _detect_information_context(self, transcript: str) -> Optional[Dict[str, Any]]:
+        """Detect if the call is primarily about information/account status"""
+        
+        # Priority: If it's troubleshooting, it is NOT just an info call.
+        if any(keyword in transcript for keyword in self.troubleshooting_keywords):
+            return None
+            
+        matches = sum(1 for keyword in self.information_keywords if keyword in transcript)
+        
+        if matches >= 1:
+             return {
+                "type": "information_providing",
+                "confidence": 0.9
+             }
         return None

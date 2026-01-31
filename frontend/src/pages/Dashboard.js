@@ -8,6 +8,7 @@ import StationMap from '../components/StationMap';
 import KPIGauge from '../components/KPIGauge';
 import AICoach from '../components/AICoach';
 import VapiAssistant from '../components/VapiAssistant';
+import Scorecard from '../components/Scorecard';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -192,10 +193,13 @@ function Dashboard() {
                                 value={transcript}
                                 onChange={(e) => setTranscript(e.target.value)}
                                 placeholder="Start the Voice Agent to converse..."
-                                rows="8"
+                                rows="20"
                                 style={{
                                     borderColor: '#E2E8F0',
-                                    boxShadow: 'none'
+                                    boxShadow: 'none',
+                                    minHeight: '400px',
+                                    fontSize: '1rem',
+                                    padding: '1rem'
                                 }}
                             />
                         </div>
@@ -224,6 +228,11 @@ function Dashboard() {
                         </div>
                     ) : (
                         <>
+                            {/* QA Scorecard */}
+                            {analysis.qa_result && (
+                                <Scorecard qaResult={analysis.qa_result} />
+                            )}
+
                             {/* Live Map - Visible only after analysis */}
                             <div className="card" style={{ marginBottom: '1.5rem' }}>
                                 <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>Live Network Map (Real-Time)</h4>

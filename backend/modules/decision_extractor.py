@@ -60,13 +60,18 @@ class DecisionExtractor:
             return self._extract_technical_decision(transcript)
         elif decision_type == "response_structure":
             return self._extract_response_decision(transcript)
+        elif decision_type == "information_providing":
+            return self._extract_information_decision(transcript)
         else:
             # Check for safety keywords if type is unknown
             if any(k in transcript.lower() for k in ["smoke", "fire", "burn", "warm", "stuck", "lock"]):
                  return self._extract_technical_decision(transcript)
             
-            # Default to routing if unclear
-            return self._extract_routing_decision(transcript, driver_location)
+            # Default to routing ONLY if station keywords exist, else general inquiry
+            if any(re.search(p, transcript.lower()) for p in self.station_patterns):
+                return self._extract_routing_decision(transcript, driver_location)
+            else:
+                 return self._extract_information_decision(transcript)
     
     def _extract_routing_decision(self, transcript: str, 
                                   driver_location: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
@@ -186,4 +191,24 @@ class DecisionExtractor:
             },
             "technical_issue": issue_type,
             "safety_action": action
+        }
+
+    def _extract_information_decision(self, transcript: str) -> Dict[str, Any]:
+        """Extract information providing decision"""
+        transcript_lower = transcript.lower()
+        
+        topic = "general_inquiry"
+        if "penalty" in transcript_lower: topic = "penalty_check"
+        elif "balance" in transcript_lower: topic = "balance_check"
+        elif "plan" in transcript_lower: topic = "plan_details"
+        elif "id" in transcript_lower or "verify" in transcript_lower: topic = "identity_verification"
+        
+        return {
+            "decision_type": "information_providing",
+            "station_id": None,
+            "details": {
+                "action": "provide_info",
+                "topic": topic
+            },
+            "info_topic": topic
         }

@@ -1,5 +1,6 @@
 import math
 import requests
+from datetime import datetime, timedelta
 from data.mock_data import MOCK_STATIONS, MOCK_DRIVERS, MOCK_SWAP_HISTORY, MOCK_SUBSCRIPTION_PLANS, MOCK_DSK_CENTERS, ALLOWED_LEAVES_PER_MONTH
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -36,7 +37,34 @@ def get_swap_history(phone_number: str):
     Get last 3 swaps for the driver.
     """
     history = MOCK_SWAP_HISTORY.get(phone_number, [])
-    return {"history": history[:3]}
+    
+    # Enrich with relative time for LLM Context
+    enriched_history = []
+    now = datetime.now()
+    
+    for swap in history[:3]:
+        entry = swap.copy()
+        if "timestamp" in entry:
+            try:
+                swap_time = datetime.fromisoformat(entry["timestamp"])
+                diff = now - swap_time
+                minutes = int(diff.total_seconds() / 60)
+                hours = int(minutes / 60)
+                
+                if minutes < 60:
+                    entry["relative_time"] = f"{minutes} minutes ago"
+                elif hours < 24:
+                    rem_min = minutes % 60
+                    entry["relative_time"] = f"{hours} hours {rem_min} minutes ago"
+                else:
+                    days = diff.days
+                    entry["relative_time"] = f"{days} days ago"
+            except Exception:
+                entry["relative_time"] = "Unknown time"
+        
+        enriched_history.append(entry)
+            
+    return {"history": enriched_history}
 
 
 def geocode_location(location_name: str):
@@ -243,7 +271,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "get_swap_history",
-            "description": "Get recent battery swap history and invoice details. Use this when user asks about past swaps, deductions or invoices.",
+            "description": "Get recent battery swap history and invoice details. **CRITICAL:** Use this IMMEDIATELY if a user reports 'battery issues', 'drain', or 'range problems' to check their last swap status.",
             "parameters": {
                 "type": "object",
                 "properties": {

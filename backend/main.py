@@ -16,6 +16,9 @@ from modules.digital_twin import DigitalTwinSimulator
 from modules.city_digital_twin import CityDigitalTwin
 from modules.counterfactual import CounterfactualComparator
 from modules.insight_generator import InsightGenerator
+from modules.insight_generator import InsightGenerator
+from modules.insight_aggregator import InsightAggregator # New import
+from modules.sop_context import get_sop_context # New import
 import os
 import logging
 
@@ -80,6 +83,8 @@ decision_extractor = DecisionExtractor()
 digital_twin = DigitalTwinSimulator(MOCK_STATIONS)
 counterfactual = CounterfactualComparator(digital_twin)
 insight_generator = InsightGenerator(llm_service)
+insight_generator = InsightGenerator(llm_service)
+aggregator = InsightAggregator() # Initialize Aggregator
 decision_emitter = DecisionEmitter()
 telegram_handler = TelegramHandler()
 
@@ -87,6 +92,8 @@ class TranscriptRequest(BaseModel):
     transcript: str
     call_id: str
     driver_location: Optional[Dict[str, float]] = None
+    agent_id: Optional[str] = "AI_Raju" 
+    city: Optional[str] = "Delhi"
 
 class SimulationIntervention(BaseModel):
     type: str # add_station, remove_station, modify_chargers, shift_demand
@@ -106,6 +113,8 @@ class AnalysisResponse(BaseModel):
     actual_decision: Dict[str, Any]
     alternatives: List[Dict[str, Any]]
     insights: Dict[str, Any]
+    agent_id: Optional[str] = None
+    city: Optional[str] = None
 
 @app.get("/")
 def root():
@@ -164,12 +173,29 @@ def analyze_call(request: TranscriptRequest):
     """
     return perform_analysis(request)
 
+@app.get("/api/insights/aggregated")
+def get_aggregated_insights():
+    """
+    Get aggregated coaching insights per Agent and City.
+    """
+    return aggregator.get_aggregated_stats()
+
+@app.get("/api/insights/flags")
+def get_supervisor_flags():
+    """
+    Get list of calls flagged for supervisor review.
+    """
+    return {"flags": aggregator.get_supervisor_flags()}
+
 def perform_analysis(request: TranscriptRequest) -> AnalysisResponse:
     # Step 1: Auto-QA Analysis (Hybrid)
     qa_result_rules = auto_qa.analyze(request.transcript)
-    if llm_service.client:
-        # Refine with LLM if available
-        qa_result = llm_service.analyze_call_qa(request.transcript, qa_result_rules)
+    
+    # Refine with LLM if available, BUT skip if we already detected "information_providing" with high confidence
+    if llm_service.client and qa_result_rules.get("decision_type") != "information_providing":
+        # Pass SOP context for stricter grading
+        sop_context = get_sop_context()
+        qa_result = llm_service.analyze_call_qa(request.transcript, qa_result_rules, sop_context)
     else:
         qa_result = qa_result_rules
     
@@ -182,12 +208,12 @@ def perform_analysis(request: TranscriptRequest) -> AnalysisResponse:
     
     # Step 3: Generate alternatives
     alternatives = []
-    if qa_result.get("issue_detected"):
-        alternatives = counterfactual.generate_alternatives(
-            actual_decision,
-            request.transcript,
-            request.driver_location
-        )
+    # Step 3: Generate alternatives (Always generate to provide "Performance Coach" insights)
+    alternatives = counterfactual.generate_alternatives(
+        actual_decision,
+        request.transcript,
+        request.driver_location
+    )
     
     # Step 4: Simulate and compare
     if alternatives:
@@ -214,7 +240,9 @@ def perform_analysis(request: TranscriptRequest) -> AnalysisResponse:
         qa_result=qa_result,
         actual_decision=actual_decision,
         alternatives=comparison.get("alternatives", []),
-        insights=insights
+        insights=insights,
+        agent_id=request.agent_id,
+        city=request.city
     )
     
     # Log to Excel
@@ -344,7 +372,13 @@ VAPI_ASSISTANT_CONFIG = {
     },
     "voice": {
         "provider": "11labs",
-        "voiceId": "IMzcdjL6UK1gZxag6QAU"
+        "voiceId": "k7nOSUCadIEwB6fdJmbw",
+        "model": "eleven_multilingual_v2",
+        "stability": 0.5,
+        "similarityBoost": 0.75,
+        "speed": 1.0,
+        "style": 0.0,
+        "useSpeakerBoost": True
     }
 }
 
@@ -354,6 +388,9 @@ async def vapi_assistant_request(request: Request):
     Returns the assistant configuration for Vapi to use when a call comes in.
     DYNAMICALLY updates based on incoming call payload.
     """
+    global LATEST_ANALYSIS
+    LATEST_ANALYSIS = None # Clear previous analysis on new call start
+    
     data = await request.json()
     call = data.get("message", {}).get("call", {})
     customer_number = call.get("customer", {}).get("number", "+11234567890") # Default to test number
@@ -380,14 +417,9 @@ async def vapi_assistant_request(request: Request):
     
     # 1. Update System Prompt with Context
     system_msg = config["model"]["messages"][0]["content"]
-    context_injection = f"""
     
-    **CURRENT CALL CONTEXT**:
-    - **Customer Phone**: {customer_number}
-    - **Tools**: You have access to tools to fetch driver profile, swap history, nearby stations, and plans.
-    - **Rule**: ALWAYS ask for Driver ID and use 'verify_driver_by_id' before providing account info. Do NOT rely on caller ID.
-    """
-    config["model"]["messages"][0]["content"] = system_msg + context_injection
+    # Use Global/Shared Context Injection
+    config["model"]["messages"][0]["content"] = system_msg + get_sop_context(customer_number)
     
     # 2. Add Tools
     config["model"]["tools"] = TOOLS_SCHEMA
@@ -428,11 +460,20 @@ async def vapi_webhook(request: Request):
         if transcript:
             print(f"Analyzing Vapi Call: {transcript[:50]}...")
             
+            # Extract metadata
+            assistant_id = data.get("message", {}).get("assistantId", "unknown")
+            # Heuristic for City based on customer phone or other metadata if available
+            customer_no = data.get("message", {}).get("call", {}).get("customer", {}).get("number", "")
+            city = "Delhi" # Default
+            if customer_no.startswith("+919"): city = "Gurgaon" # Mock logic
+            
             # Create request object
             req = TranscriptRequest(
                 transcript=transcript,
                 call_id=call_id,
-                driver_location=None 
+                driver_location=None,
+                agent_id=f"AI_{assistant_id[-4:]}" if assistant_id else "AI_Raju",
+                city=city
             )
             
             # Run analysis

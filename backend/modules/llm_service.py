@@ -15,48 +15,102 @@ class LLMService:
         else:
             self.client = Groq(api_key=api_key)
             
-    def analyze_call_qa(self, transcript: str, rules_detected: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_call_qa(self, transcript: str, rules_detected: Dict[str, Any], sop_context: str = "") -> Dict[str, Any]:
         """
-        Use LLM to analyze the call for qualitative issues that rules might miss.
-        Merges rule-based findings with LLM reasoning.
+        Use LLM to analyze the call with strict reference to SOPs.
+        Returns a weighted scorecard.
         """
         if not self.client:
             return rules_detected
 
         prompt = f"""
-        You are an expert QA analyst for a battery swapping network. 
-        Analyze this customer support call transcript.
+        You are an expert QA analyst for Battery Smart.
+        Your job is to Audit this call against the Strict SOPs provided below.
         
-        Transcript:
+        **GROUND TRUTH SOP & PRICING (AUTHORITATIVE):**
+        {sop_context}
+        
+        **CALL TRANSCRIPT:**
         "{transcript}"
         
-        Rule-based system flagged this issue: {json.dumps(rules_detected)}
+        **RULE-BASED FLAG (Hint):** {json.dumps(rules_detected)}
         
-        Your task:
-        1. Verify if the rule-based flag is accurate.
-        2. Identify if there's a deeper issue (tone, empathy, missed opportunities).
-        3. Explain WHY the decision was suboptimal in 1 sentence.
+        **YOUR TASK:**
+        Score the agent's performance (0-100) based on these weighted sections:
         
-        Return JSON format:
+        1. **Greeting (10%)**: Did they say "Namaste/Hello" and offer language choice if needed?
+        2. **Authentication (30%) [CRITICAL]**: 
+           - Did the Agent explicitly ASK for the Driver ID? (e.g. "Apna ID batayein")
+           - Did the Agent call the `verify_driver_by_id` tool?
+           - **AUTOMATIC FAIL (0/30)** if the agent provided 'swap history', 'balance', or 'profile' WITHOUT first asking for ID or calling the verify tool. Even if the tool provided the data, the AGENT failed the protocol.
+        3. **Solution Correctness (40%)**: 
+           - Was the pricing/penalty/rule explained ACCURATELY per the Ground Truth?
+           - Did they check for 'availability' before routing?
+        4. **Closing (20%)**: Polite closing?
+        
+        **OUTPUT JSON:**
         {{
-            "issue_detected": true/false,
-            "decision_type": "station_routing" | "escalation_timing" | "response_structure",
-            "reason": "Clear explanation of the mistake",
-            "confidence": 0.0-1.0
+            "issue_detected": true/false (Set true if ANY critical fail),
+            "decision_type": "station_routing" | "escalation_timing" | "response_structure" | "information_providing",
+            "reason": "Root cause of the failure or main observation.",
+            "confidence": 0.0-1.0,
+            "scorecard": {{
+                "greeting_score": 0-10,
+                "authentication_score": 0-30,
+                "solution_score": 0-40,
+                "closing_score": 0-20,
+                "total_score": 0-100,
+                "adherence_score": 0-100, # Legacy field (same as total_score)
+                "correctness_score": 0-100, # Normalized solution score (0-100 scale)
+                "sentiment_label": "Positive" | "Neutral" | "Negative"
+            }},
+            "coaching_theme": "The #1 thing to fix next time.",
+            "supervisor_flag": true/false (Flag if total_score < 70 or critical compliance breach)
         }}
         """
 
         try:
             chat_completion = self.client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that outputs JSON."},
+                    {"role": "system", "content": "You are a specific, strict QA auditor. Output valid JSON only."},
                     {"role": "user", "content": prompt}
                 ],
                 model="llama-3.3-70b-versatile",
-                temperature=0.1,
+                temperature=0.0, # Zero temp for strict evaluation
                 response_format={"type": "json_object"}
             )
-            return json.loads(chat_completion.choices[0].message.content)
+            result = json.loads(chat_completion.choices[0].message.content)
+            
+            # SAFEGUARD: Ensure scorecard exists. If not, use rule-based default or perfect score.
+            if "scorecard" not in result:
+                is_issue = result.get("issue_detected") or rules_detected.get("issue_detected")
+                
+                if is_issue:
+                     default_score = {
+                        "total_score": 40,
+                        "greeting_score": 5,
+                        "authentication_score": 0, # Assume auth fail if critical issue matched
+                        "solution_score": 15,
+                        "closing_score": 10,
+                        "sentiment_label": "Negative",
+                        "adherence_score": 40,
+                        "correctness_score": 40
+                    }
+                else:
+                    default_score = {
+                        "total_score": 100,
+                        "greeting_score": 10,
+                        "authentication_score": 30,
+                        "solution_score": 40,
+                        "closing_score": 20,
+                        "sentiment_label": "Positive",
+                        "adherence_score": 100,
+                        "correctness_score": 100
+                    }
+                    
+                result["scorecard"] = rules_detected.get("scorecard", default_score)
+            
+            return result
         except Exception as e:
             print(f"LLM Error: {e}")
             return rules_detected

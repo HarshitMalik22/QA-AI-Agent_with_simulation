@@ -29,8 +29,14 @@ class CounterfactualComparator:
             return self._generate_escalation_alternatives(actual_decision)
         elif decision_type == "response_structure":
             return self._generate_response_alternatives(actual_decision, driver_location)
+        elif decision_type == "information_providing":
+            return self._generate_information_alternatives(actual_decision)
         else:
-            return []
+            # Fallback: Try to generate routing alternatives if location is present, otherwise info
+            if driver_location:
+                return self._generate_routing_alternatives(actual_decision, driver_location)
+            else:
+                return self._generate_information_alternatives(actual_decision)
     
     def _generate_routing_alternatives(self, actual_decision: Dict[str, Any],
                                       driver_location: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
@@ -111,6 +117,19 @@ class CounterfactualComparator:
                 })
         
         return alternatives
+
+    def _generate_information_alternatives(self, actual_decision: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate alternative information providing decisions"""
+        alternatives = []
+        
+        # Alternative 1: Suggest asking for ID (Simulating the strict flow)
+        alternatives.append({
+            "decision_type": "information_providing",
+            "description": "Strictly verify ID before providing answer",
+            "option": "Verify ID First"
+        })
+        
+        return alternatives
     
     def compare(self, actual_decision: Dict[str, Any], 
                alternatives: List[Dict[str, Any]],
@@ -139,9 +158,9 @@ class CounterfactualComparator:
         
         # Generate dynamic description for original
         reasons = []
-        if actual_result["congestion_risk"] == "High": reasons.append("High Congestion")
-        if actual_result["expected_wait_time"] > 15: reasons.append("Long Wait")
-        if actual_result["repeat_call_risk"] == "High": reasons.append("Risk of Repeat Call")
+        if actual_result.get("congestion_risk") == "High": reasons.append("High Congestion")
+        if actual_result.get("expected_wait_time", 0) > 15: reasons.append("Long Wait")
+        if actual_result.get("repeat_call_risk") == "High": reasons.append("Risk of Repeat Call")
         
         if reasons:
             actual_result["description"] = f"Original ({', '.join(reasons)})"
@@ -157,8 +176,11 @@ class CounterfactualComparator:
             alt_result["decision_type"] = alt.get("decision_type")  # Preserve decision type
             
             # Calculate improvement metrics
-            wait_improvement = actual_result["expected_wait_time"] - alt_result["expected_wait_time"]
-            wait_improvement_pct = (wait_improvement / actual_result["expected_wait_time"] * 100) if actual_result["expected_wait_time"] > 0 else 0
+            wait_actual = actual_result.get("expected_wait_time", 0)
+            wait_alt = alt_result.get("expected_wait_time", 0)
+            
+            wait_improvement = wait_actual - wait_alt
+            wait_improvement_pct = (wait_improvement / wait_actual * 100) if wait_actual > 0 else 0
             
             alt_result["improvement"] = {
                 "wait_time_reduction": round(wait_improvement, 1),
