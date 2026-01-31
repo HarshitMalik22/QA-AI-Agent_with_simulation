@@ -4,40 +4,59 @@ Mock Data for Digital Twin Simulation
 Realistic but simplified data for demo purposes.
 """
 
-MOCK_STATIONS = [
-    {
-        "id": "A",
-        "name": "Station A - Tilak Nagar",
-        "capacity": 10,
-        "current_load": 9, 
-        "avg_service_time": 5.0,
-        "location": {"lat": 28.6366, "lon": 77.0965}
-    },
-    {
-        "id": "B",
-        "name": "Station B - Rajouri Garden",
-        "capacity": 12,
-        "current_load": 2, 
-        "avg_service_time": 4.5,
-        "location": {"lat": 28.6415, "lon": 77.1209}
-    },
-    {
-        "id": "C",
-        "name": "Station C - Okhla Phase 3",
-        "capacity": 8,
-        "current_load": 6,
-        "avg_service_time": 5.5,
-        "location": {"lat": 28.5272, "lon": 77.2644}
-    },
-    {
-        "id": "D",
-        "name": "Station D - Mayapuri",
-        "capacity": 15,
-        "current_load": 4,
-        "avg_service_time": 4.0,
-        "location": {"lat": 28.6289, "lon": 77.1132}
-    }
-]
+import pandas as pd
+import os
+
+# Load Partner Data from CSV
+# File: Partners.xlsx - result.csv
+# Columns: id, latitude, longitude, isActiveDsk
+
+csv_path = os.path.join(os.path.dirname(__file__), "Partners.xlsx - result.csv")
+
+try:
+    df = pd.read_csv(csv_path)
+    
+    # Transform to MOCK_STATIONS format
+    MOCK_STATIONS = []
+    
+    for _, row in df.iterrows():
+        try:
+            # Handle potential non-numeric lat/long
+            lat = float(row['latitude'])
+            lon = float(row['longitude'])
+            
+            # Skip invalid coordinates (0,0 or incomplete)
+            if lat == 0 or lon == 0 or (lat == 26 and lon == 80): 
+                 continue
+            
+            MOCK_STATIONS.append({
+                "id": str(row['id']),
+                "name": f"Station {row['id']}", 
+                "capacity": 20, # Default capacity
+                "current_load": 5, # Default load
+                "avg_service_time": 4.0, # Default time
+                "location": {"lat": lat, "lon": lon},
+                "is_dsk": bool(row.get('isActiveDsk', False))
+            })
+        except ValueError:
+            continue
+            
+    print(f"Loaded {len(MOCK_STATIONS)} stations from CSV.")
+
+except Exception as e:
+    print(f"Error loading CSV: {e}. Falling back to mock data.")
+    MOCK_STATIONS = [
+        {
+            "id": "BS-001",
+            "name": "Tilak Nagar - Main Market",
+            "capacity": 15,
+            "current_load": 12, 
+            "avg_service_time": 4.5,
+            "location": {"lat": 28.6366, "lon": 77.0965}
+        },
+        # ... (Fallback if needed, or kept minimal)
+    ]
+
 
 MOCK_TRANSCRIPTS = [
     {
@@ -92,3 +111,57 @@ MOCK_TRANSCRIPTS = [
         "driver_location": {"lat": 28.6139, "lon": 77.2090}
     }
 ]
+
+MOCK_SUBSCRIPTION_PLANS = {
+    "basic": {"name": "Basic Plan", "price": 499, "validity_days": 28, "swaps": 10},
+    "smart_saver": {"name": "Smart Saver", "price": 999, "validity_days": 28, "swaps": 25},
+    "unlimited": {"name": "Unlimited Power", "price": 1999, "validity_days": 28, "swaps": 999}
+}
+
+MOCK_DRIVERS = {
+    "+919876543210": {
+        "name": "Ramesh Kumar",
+        "plan": "smart_saver",
+        "plan_expiry": "2024-02-15",
+        "balance": 150,
+        "home_station": "BS-001"
+    },
+    "+11234567890": {  # Default for testing
+        "name": "Test Driver",
+        "plan": "basic",
+        "plan_expiry": "2024-02-10",
+        "balance": 50,
+        "home_station": "BS-002"
+    }
+}
+
+MOCK_SWAP_HISTORY = {
+    "+11234567890": [
+        {"date": "2024-01-25", "station": "Station A", "units": 1.2, "amount": 80, "status": "Success"},
+        {"date": "2024-01-23", "station": "Station B", "units": 1.1, "amount": 75, "status": "Success"},
+        {"date": "2024-01-20", "station": "Station A", "units": 1.3, "amount": 85, "status": "failed"}
+    ]
+}
+
+MOCK_DSK_CENTERS = [
+    {
+        "name": "DSK Janakpuri",
+        "address": "B-12, Community Centre, Janakpuri",
+        "phone": "+91-11-25550101",
+        "location": {"lat": 28.6219, "lon": 77.0878}
+    },
+    {
+        "name": "DSK Dwarka",
+        "address": "Sector 12, Market Complex, Dwarka",
+        "phone": "+91-11-28030202",
+        "location": {"lat": 28.5921, "lon": 77.0460}
+    },
+    {
+        "name": "DSK Uttam Nagar",
+        "address": "Near East Metro Station, Uttam Nagar",
+        "phone": "+91-9810098100",
+        "location": {"lat": 28.6273, "lon": 77.0565}
+    }
+]
+
+# KNOWN_LOCATIONS removed - using geocoding API instead

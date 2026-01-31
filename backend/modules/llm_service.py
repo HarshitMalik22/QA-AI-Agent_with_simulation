@@ -101,3 +101,35 @@ class LLMService:
         except Exception as e:
             print(f"LLM Error: {e}")
             return "Tip: Choosing a station with lower load can significantly reduce wait times for our drivers."
+
+    def analyze_image(self, image_url: str, prompt: str = "Analyze this image relevant to battery swapping context.") -> str:
+        """
+        Use Llama 3.2 Vision model to analyze images (e.g., error codes, damaged batteries).
+        """
+        if not self.client:
+            return "Vision features unavailable (API Key missing)."
+
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url
+                                }
+                            }
+                        ]
+                    }
+                ],
+                model="llama-3.2-11b-vision-preview",
+                temperature=0.5,
+                max_tokens=150
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            print(f"Vision API Error: {e}")
+            return "Sorry, I couldn't process the image due to a technical issue."

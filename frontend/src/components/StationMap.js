@@ -1,94 +1,129 @@
-import React from 'react';
+
+import React, { useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
+import 'leaflet-defaulticon-compatibility';
+import L from 'leaflet';
+
+// Custom Icons to make it look premium
+// Driver Icon (Car or Person) - Violet
+// Driver Icon (EV Rickshaw)
+const driverIcon = new L.Icon({
+    iconUrl: '/ev-marker.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    iconSize: [40, 40], // Slightly larger for the detailed icon
+    iconAnchor: [20, 40],
+    popupAnchor: [0, -40],
+    shadowSize: [41, 41]
+});
+
+// Station Icons based on color
+const getStationIcon = (color) => new L.Icon({
+    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+
+// Component to fly to the driver's location when it changes
+const RecenterMap = ({ location }) => {
+    const map = useMap();
+    const hasCentered = React.useRef(false);
+
+    useEffect(() => {
+        if (location && location.lat && location.lon && !hasCentered.current) {
+            // Set view once when we get first valid location
+            map.setView([location.lat, location.lon], 14, { animate: true });
+            hasCentered.current = true;
+        }
+    }, [location, map]);
+    return null;
+};
 
 const StationMap = ({ stations, driverLocation, recommendedStationId }) => {
-    // Normalize coordinates for display on a 100x100 grid
-    // This is a simplified projection for the demo
+    // Default center if no driver location (New Delhi)
+    const center = driverLocation && driverLocation.lat
+        ? [driverLocation.lat, driverLocation.lon]
+        : [28.6139, 77.2090];
 
-    // Find bounds
-    // Find bounds
-
-    // Mock positions for visual demo if real lat/lon is too close
-    const mapPositions = {
-        'A': { x: 50, y: 50 },     // Central
-        'B': { x: 20, y: 30 },     // Top Left
-        'C': { x: 80, y: 70 },     // Bottom Right
-        'D': { x: 30, y: 80 },     // Bottom Left
-        'driver': { x: 45, y: 45 } // Default driver pos
-    };
-
-    // If we have actual station data, use it, otherwise fallback
-    const getStationPos = (id) => mapPositions[id] || { x: 50, y: 50 };
+    // Find recommended station to draw path
+    const recStation = stations.find(s => s.id === recommendedStationId);
 
     return (
-        <div className="map-container">
-            <svg width="100%" height="100%" viewBox="0 0 100 100">
-                {/* Grid Lines */}
-                <defs>
-                    <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
-                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#E2E8F0" strokeWidth="0.5" />
-                    </pattern>
-                </defs>
-                <rect width="100" height="100" fill="url(#grid)" />
+        <div className="map-container" style={{ height: '400px', width: '100%', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+            <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                />
 
-                {/* Stations */}
-                {stations.map(station => {
-                    const pos = getStationPos(station.id);
-                    const isRec = station.id === recommendedStationId;
-                    const loadColor = station.current_load / station.capacity > 0.8 ? '#EF4444' :
-                        station.current_load / station.capacity > 0.5 ? '#F59E0B' : '#10B981';
+                {/* Driver Marker */}
+                {driverLocation && driverLocation.lat && (
+                    <Marker position={[driverLocation.lat, driverLocation.lon]} icon={driverIcon}>
+                        <Popup>
+                            <strong>You are here</strong><br />
+                            Driver Tracking Active
+                        </Popup>
+                    </Marker>
+                )}
+
+                {/* Station Markers */}
+                {stations.map(stn => {
+                    const isRec = stn.id === recommendedStationId;
+                    const load = stn.current_load / stn.capacity;
+
+                    // Determine Color
+                    let color = 'green';
+                    if (load > 0.8) color = 'red';
+                    else if (load > 0.5) color = 'orange';
+
+                    // Highlight recommended
+                    if (isRec) color = 'blue';
 
                     return (
-                        <g key={station.id} transform={`translate(${pos.x}, ${pos.y})`}>
-                            {/* Connection Line to Driver */}
-                            {driverLocation && (
-                                <line
-                                    x1="0" y1="0"
-                                    x2={mapPositions.driver.x - pos.x}
-                                    y2={mapPositions.driver.y - pos.y}
-                                    stroke={isRec ? '#3B82F6' : '#CBD5E1'}
-                                    strokeWidth={isRec ? "0.5" : "0.2"}
-                                    strokeDasharray={isRec ? "0" : "2,1"}
-                                />
-                            )}
-
-                            {/* Station Dot */}
-                            <circle
-                                r="4"
-                                fill="white"
-                                stroke={isRec ? '#3B82F6' : loadColor}
-                                strokeWidth={isRec ? "0.8" : "0.5"}
-                                className={isRec ? 'animate-pulse' : ''}
-                            />
-
-                            {/* Station Label */}
-                            <text y="7" fontSize="5" textAnchor="middle" fill="#64748B" fontWeight="600">
-                                Stn {station.id}
-                            </text>
-
-                            {/* Load Indicator */}
-                            <text y="-5" fontSize="4" textAnchor="middle" fill={loadColor}>
-                                {Math.round((station.current_load / station.capacity) * 100)}%
-                            </text>
-                        </g>
-                    );
+                        <Marker
+                            key={stn.id}
+                            position={[stn.location.lat, stn.location.lon]}
+                            icon={getStationIcon(color)}
+                        >
+                            <Popup>
+                                <div style={{ textAlign: 'center' }}>
+                                    <strong>{stn.name}</strong>
+                                    <br />
+                                    <div style={{ marginTop: '5px' }}>
+                                        <span className={`risk-badge ${color === 'red' ? 'high' : color === 'orange' ? 'medium' : 'low'}`}
+                                            style={{ display: 'inline-block', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', color: 'white', backgroundColor: color === 'blue' ? '#3B82F6' : color }}>
+                                            {color === 'blue' ? 'Recommended' : `${Math.round(load * 100)}% Load`}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                                        Wait: ~{stn.avg_service_time} min
+                                    </div>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )
                 })}
 
-                {/* Driver */}
-                <g transform={`translate(${mapPositions.driver.x}, ${mapPositions.driver.y})`}>
-                    <circle r="3" fill="#1A1F2C" stroke="white" strokeWidth="0.5" />
-                    <text y="7" fontSize="5" textAnchor="middle" fill="#1A1F2C" fontWeight="700">You</text>
-                </g>
-            </svg>
+                {/* Path Line if recommended */}
+                {driverLocation && driverLocation.lat && recStation && (
+                    <Polyline
+                        positions={[
+                            [driverLocation.lat, driverLocation.lon],
+                            [recStation.location.lat, recStation.location.lon]
+                        ]}
+                        color="#3B82F6"
+                        dashArray="5, 10"
+                        weight={3}
+                        opacity={0.7}
+                    />
+                )}
 
-            {/* Legend Overlay */}
-            <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(255,255,255,0.8)', padding: 5, borderRadius: 5, fontSize: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', marginRight: 4 }}></span> High Load
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 4 }}></span> Low Load
-                </div>
-            </div>
+                <RecenterMap location={driverLocation} />
+            </MapContainer>
         </div>
     );
 };
