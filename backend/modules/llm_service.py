@@ -24,49 +24,130 @@ class LLMService:
             return rules_detected
 
         prompt = f"""
-        You are an expert QA analyst for Battery Smart.
-        Your job is to Audit this call against the Strict SOPs provided below.
-        
+        You are a STRICT, METICULOUS QA Auditor for Battery Smart. Your job is to DEEPLY SCRUTINIZE every line of this call transcript and catch ALL violations.
+
         **GROUND TRUTH SOP & PRICING (AUTHORITATIVE):**
         {sop_context}
         
-        **CALL TRANSCRIPT:**
+        **CALL TRANSCRIPT TO AUDIT:**
         "{transcript}"
         
         **RULE-BASED FLAG (Hint):** {json.dumps(rules_detected)}
         
-        **YOUR TASK:**
-        Score the agent's performance (0-100) based on these weighted sections:
+        ===== CRITICAL AUDIT INSTRUCTIONS =====
         
-        1. **Greeting (10%)**: Did they say "Namaste/Hello" and offer language choice if needed?
-        2. **Authentication (30%) [CRITICAL]**: 
-           - Did the Agent explicitly ASK for the Driver ID? (e.g. "Apna ID batayein")
-           - Did the Agent call the `verify_driver_by_id` tool?
-           - **AUTOMATIC FAIL (0/30)** if the agent provided 'swap history', 'balance', or 'profile' WITHOUT first asking for ID or calling the verify tool. Even if the tool provided the data, the AGENT failed the protocol.
-        3. **Solution Correctness (40%)**: 
-           - Was the pricing/penalty/rule explained ACCURATELY per the Ground Truth?
-           - Did they check for 'availability' before routing?
-        4. **Closing (20%)**: Polite closing?
+        **STEP 1: READ THE ENTIRE TRANSCRIPT LINE BY LINE**
+        - Identify EVERY statement made by the Agent.
+        - For each Agent statement, ask: "Is this correct? Is this on-topic? Did they follow SOP?"
         
-        **OUTPUT JSON:**
+        **STEP 2: CHECK FOR THESE SPECIFIC VIOLATIONS**
+        
+        🔴 **OFF-TOPIC VIOLATION (INSTANT -50 PENALTY)**
+        - Did the agent answer ANY question unrelated to Battery Smart?
+        - Examples: Math tables, jokes, songs, general knowledge, coding, weather, stories, recipes, games.
+        - If Agent said ANYTHING like "2 ka table", "ek joke sunao", answered homework/math questions → AUTOMATIC -50 penalty.
+        - CORRECT BEHAVIOR: Agent should say "Main sirf Battery Smart services mein help kar sakta hoon."
+        
+        🔴 **AUTHENTICATION BYPASS (0/30 on Authentication)**
+        - Did Agent give account info (balance, swaps, profile) BEFORE asking for Driver ID?
+        - Did Agent verify ID through the tool before sharing sensitive data?
+        
+        🔴 **WRONG INFORMATION GIVEN (0/40 on Solution)**
+        - Did Agent give incorrect pricing, penalty amounts, or policies?
+        - Cross-check EVERY number against the Ground Truth SOP above.
+        
+        **STEP 3: KEY STEPS CHECKLIST (Check each one)**
+        For each step, mark true ONLY if explicitly done:
+        1. greeting_offered: Did agent say Namaste/Hello?
+        2. language_choice_given: Did agent offer language options?
+        3. id_requested: Did agent explicitly ASK for Driver ID?
+        4. id_verified_via_tool: Was verify_driver_by_id called? (Look for verification confirmation)
+        5. correct_info_provided: Was all info given factually correct per SOP?
+        6. closing_script_used: Did agent use the mandatory closing script OR a polite closing?
+        
+        **STEP 4: SENTIMENT TRAJECTORY ANALYSIS**
+        - Track customer sentiment at START vs END of call.
+        - Identify frustration signals: raised voice indicators (caps, exclamations), repeated questions, explicit complaints.
+        - Determine escalation_risk: 
+          - "Low" = Customer satisfied, no frustration
+          - "Medium" = Some frustration but resolved
+          - "High" = Customer angry/frustrated at end, or issue unresolved
+        
+        **STEP 5: SCORE EACH SECTION WITH EVIDENCE**
+        
+        1. **Greeting (0-10)**: Quote the greeting. Was it professional?
+        2. **Authentication (0-30)**: 
+           - Quote where Agent asked for ID (or didn't).
+           - If info given before ID verification → 0/30.
+        3. **Solution Correctness (0-40)**:
+           - Quote the solution/answer given.
+           - Were wrong prices, wrong rules, or wrong info provided? → Deduct heavily.
+        4. **Closing (0-20)**: Was there a polite closing?
+        5. **Guardrails Penalty (-50)**: 
+           - Quote ANY off-topic response by Agent.
+           - If found → Apply -50 penalty to total.
+        
+        **STEP 6: CALCULATE FINAL SCORE**
+        - Start with sum of sections 1-4 (max 100).
+        - Apply -50 penalty if guardrails violated.
+        - Minimum score is 0 (no negatives).
+        
+        ===== OUTPUT JSON FORMAT =====
         {{
-            "issue_detected": true/false (Set true if ANY critical fail),
-            "decision_type": "station_routing" | "escalation_timing" | "response_structure" | "information_providing",
-            "reason": "Root cause of the failure or main observation.",
+            "transcript_analysis": {{
+                "off_topic_violations": ["Quote exact off-topic responses here, or empty array if none"],
+                "auth_violations": ["Quote where auth was skipped, or empty if followed"],
+                "incorrect_info": ["Quote any wrong information given, or empty if all correct"]
+            }},
+            "key_steps_checklist": {{
+                "greeting_offered": true/false,
+                "language_choice_given": true/false,
+                "id_requested": true/false,
+                "id_verified_via_tool": true/false,
+                "correct_info_provided": true/false,
+                "closing_script_used": true/false
+            }},
+            "sentiment_trajectory": {{
+                "start_sentiment": "Neutral" | "Positive" | "Negative",
+                "end_sentiment": "Neutral" | "Positive" | "Negative",
+                "escalation_risk": "Low" | "Medium" | "High",
+                "frustration_indicators": ["Quote any frustration signals from customer, or empty array"]
+            }},
+            "call_summary": "2-3 sentence summary of what happened in the call, citing specific issues.",
+            "improvement_explanation": "Specific, actionable feedback with exact quotes of what went wrong.",
+            "issue_detected": true/false,
+            "decision_type": "station_routing" | "escalation_timing" | "response_structure" | "information_providing" | "off_topic_violation",
+            "reason": "Root cause with evidence from transcript.",
             "confidence": 0.0-1.0,
             "scorecard": {{
                 "greeting_score": 0-10,
                 "authentication_score": 0-30,
                 "solution_score": 0-40,
                 "closing_score": 0-20,
-                "total_score": 0-100,
-                "adherence_score": 0-100, # Legacy field (same as total_score)
-                "correctness_score": 0-100, # Normalized solution score (0-100 scale)
+                "guardrails_penalty": 0 or -50,
+                "total_score": (sum of above, min 0),
+                "adherence_score": <same as total_score>,
+                "correctness_score": <solution_score normalized to 0-100>,
                 "sentiment_label": "Positive" | "Neutral" | "Negative"
             }},
-            "coaching_theme": "The #1 thing to fix next time.",
-            "supervisor_flag": true/false (Flag if total_score < 70 or critical compliance breach)
+            "coaching_insights": {{
+                "primary_theme": "The #1 thing this agent needs to improve",
+                "specific_example": "Exact quote from transcript showing the issue",
+                "suggested_fix": "Concrete action to take next time"
+            }},
+            "supervisor_flag": true/false,
+            "supervisor_flag_reasons": ["List reasons: low score, auth bypass, off-topic, high escalation risk, wrong info, etc."]
         }}
+        
+        **SUPERVISOR FLAG TRIGGERS (flag if ANY of these):**
+        - total_score < 70
+        - authentication_score = 0
+        - off_topic_violation detected
+        - escalation_risk = "High"
+        - Customer expressed anger/frustration without proper handling
+        - Wrong pricing/penalty info provided
+        
+        **REMEMBER: Be HARSH. Catch EVERY mistake. Do NOT give 100/100 unless the call is PERFECT.**
         """
 
         try:

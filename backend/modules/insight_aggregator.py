@@ -92,3 +92,87 @@ class InsightAggregator:
         flagged_df.fillna("", inplace=True)
         
         return flagged_df.to_dict(orient="records")
+
+    def get_agent_coaching_themes(self, agent_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Returns coaching themes per agent based on recurring issues.
+        If agent_id is provided, returns themes for that agent only.
+        """
+        df = self._load_data()
+        if df.empty:
+            return []
+
+        # Ensure column exists
+        if "QA Reason" not in df.columns or "Agent ID" not in df.columns:
+            return []
+        
+        # Filter by agent if specified
+        if agent_id:
+            df = df[df["Agent ID"] == agent_id]
+        
+        # Group by agent and find most common issues
+        results = []
+        agent_groups = df.groupby("Agent ID")
+        for agent, group in agent_groups:
+            # Get top 3 recurring issues
+            issues = group["QA Reason"].value_counts().head(3)
+            if not issues.empty:
+                results.append({
+                    "agent_id": agent,
+                    "total_calls": len(group),
+                    "top_issues": [
+                        {"issue": issue, "count": int(count), "pct": round(count/len(group)*100, 1)}
+                        for issue, count in issues.items()
+                    ],
+                    "avg_score": round(group["Adherence Score"].mean(), 1) if "Adherence Score" in group.columns else 0,
+                    "coaching_priority": "High" if group["Adherence Score"].mean() < 70 else "Medium" if group["Adherence Score"].mean() < 85 else "Low"
+                })
+        
+        # Sort by coaching priority (High first)
+        priority_order = {"High": 0, "Medium": 1, "Low": 2}
+        results.sort(key=lambda x: priority_order.get(x["coaching_priority"], 3))
+        
+        return results
+
+    def get_city_root_causes(self, city: str = None) -> List[Dict[str, Any]]:
+        """
+        Returns root causes and patterns per city.
+        If city is provided, returns data for that city only.
+        """
+        df = self._load_data()
+        if df.empty:
+            return []
+
+        # Ensure columns exist
+        if "City" not in df.columns or "QA Reason" not in df.columns:
+            return []
+        
+        # Filter by city if specified
+        if city:
+            df = df[df["City"] == city]
+        
+        results = []
+        city_groups = df.groupby("City")
+        for city_name, group in city_groups:
+            # Get top issues for this city
+            issues = group["QA Reason"].value_counts().head(5)
+            risk_calls = len(group[group["Issue Detected"] == True])
+            
+            results.append({
+                "city": city_name,
+                "total_calls": len(group),
+                "risk_calls": risk_calls,
+                "risk_rate": round(risk_calls / len(group) * 100, 1) if len(group) > 0 else 0,
+                "root_causes": [
+                    {"cause": cause, "count": int(count)}
+                    for cause, count in issues.items()
+                ],
+                "avg_score": round(group["Adherence Score"].mean(), 1) if "Adherence Score" in group.columns else 0,
+                "attention_needed": risk_calls / len(group) > 0.2 if len(group) > 0 else False
+            })
+        
+        # Sort by risk rate (highest first)
+        results.sort(key=lambda x: x["risk_rate"], reverse=True)
+        
+        return results
+

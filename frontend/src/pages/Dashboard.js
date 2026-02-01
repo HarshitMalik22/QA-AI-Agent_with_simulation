@@ -265,59 +265,93 @@ function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Middle Row: Comparison Table */}
-                            <div className="card" style={{ marginBottom: '1.5rem' }}>
-                                <div className="analysis-header">
-                                    <h3 style={{ margin: 0 }}>Counterfactual Analysis</h3>
-                                    <div className={`risk-badge ${analysis.qa_result.issue_detected ? 'high' : 'low'}`}>
-                                        {analysis.qa_result.issue_detected ? 'Optimization Opportunity' : 'Optimal Decision'}
+                            {/* Middle Row: Comparison Table and QA Narrative */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                {/* Left: Call Summary & Improvements */}
+                                <div className="card">
+                                    <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>📝 Call Narrative</h4>
+
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <h5 style={{ margin: '0 0 0.5rem 0', color: '#1F2937' }}>Interaction Summary</h5>
+                                        <p style={{ fontSize: '0.9rem', color: '#4B5563', lineHeight: '1.5' }}>
+                                            {analysis.insights.call_summary || "Summary not available."}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <h5 style={{ margin: '0 0 0.5rem 0', color: '#DC2626' }}>⚠ Improvement Feedback</h5>
+                                        <div style={{
+                                            background: '#FEF2F2',
+                                            padding: '0.75rem',
+                                            borderRadius: '6px',
+                                            borderLeft: '4px solid #EF4444',
+                                            fontSize: '0.9rem',
+                                            color: '#991B1B'
+                                        }}>
+                                            {analysis.insights.improvement_explanation || "No specific improvements identified."}
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="table-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>Scenario</th>
-                                                <th>Context</th>
-                                                <th>Wait Time</th>
-                                                <th>Congestion</th>
-                                                <th>Repeat Risk</th>
-                                                <th>Impact</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {analysis.alternatives.map((alt, idx) => (
-                                                <tr key={idx} className={alt.is_actual ? 'actual-row' : ''}>
-                                                    <td>
-                                                        <div style={{ fontWeight: 600 }}>
-                                                            {alt.is_actual ? 'Original Decision' : 'Simulation'}
-                                                        </div>
-                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                                            {alt.option}
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                                                        {alt.description}
-                                                    </td>
-                                                    <td>{alt.expected_wait_time} min</td>
-                                                    <td>
-                                                        <span className={`risk-badge ${alt.congestion_risk.toLowerCase()}`}>
-                                                            {alt.congestion_risk}
-                                                        </span>
-                                                    </td>
-                                                    <td>{alt.repeat_call_risk}</td>
-                                                    <td>
-                                                        {alt.improvement?.wait_time_reduction_pct > 0 && (
-                                                            <span style={{ color: 'var(--success)', fontWeight: 600 }}>
-                                                                ↓ {alt.improvement.wait_time_reduction_pct}% wait
-                                                            </span>
-                                                        )}
-                                                    </td>
+                                {/* Right: Simulation Narrative & Table */}
+                                <div className="card">
+                                    <div className="analysis-header">
+                                        <h3 style={{ margin: 0 }}>Counterfactual Analysis</h3>
+                                        <div className={`risk-badge ${analysis.qa_result.issue_detected ? 'high' : 'low'}`}>
+                                            {analysis.qa_result.issue_detected ? 'Optimization Opportunity' : 'Optimal Decision'}
+                                        </div>
+                                    </div>
+
+                                    <p style={{
+                                        fontSize: '0.9rem',
+                                        color: '#374151',
+                                        marginBottom: '1rem',
+                                        paddingBottom: '1rem',
+                                        borderBottom: '1px solid #E5E7EB',
+                                        fontStyle: 'italic'
+                                    }}>
+                                        " {analysis.insights.simulation_narrative || "Simulation shows alternative outcomes."} "
+                                    </p>
+
+                                    <div className="table-container">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>Scenario</th>
+                                                    <th>Wait Time</th>
+                                                    <th>Congestion</th>
+                                                    <th>Impact</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {analysis.alternatives.map((alt, idx) => (
+                                                    <tr key={idx} className={alt.is_actual ? 'actual-row' : ''}>
+                                                        <td>
+                                                            <div style={{ fontWeight: 600 }}>
+                                                                {alt.is_actual ? 'Original' : 'Simulation'}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                                {alt.option}
+                                                            </div>
+                                                        </td>
+                                                        <td>{alt.expected_wait_time} min</td>
+                                                        <td>
+                                                            <span className={`risk-badge ${alt.congestion_risk.toLowerCase()}`}>
+                                                                {alt.congestion_risk}
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            {alt.improvement?.wait_time_reduction_pct > 0 && (
+                                                                <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                                    ↓ {alt.improvement.wait_time_reduction_pct}% wait
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
 
